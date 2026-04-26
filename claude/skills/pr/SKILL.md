@@ -37,17 +37,34 @@ Based on the diff output, produce a JSON object with exactly these fields:
 - `pr_body`: plain prose, max 4 sentences, no bullet points. Describe the goal the change achieves — never list file paths, enumerate individual scripts, or echo the user's request. Avoid self-evident framing like "Replaces X with Y" or "Updates X to include Y" — lead with the substance. File locations and what changed are visible in the diff; the body should convey intent and why.
 - `labels`: array of label strings to apply. Choose from the available labels below — multiple can apply.
 
-### Closing issues via PR
+### Linking issues in PR body
 
-If this PR resolves a GitHub issue **and** no further testing, verification, or follow-up is required after merge, prepend `Closes #N` as the very first line of `pr_body`, followed by a blank line:
+If this PR has an associated GitHub issue, the issue reference must be the very first line of `pr_body`, followed by a `---` divider and a blank line before the prose:
+
+- Use `Closes #N` when the merge fully resolves the issue with no further verification or follow-up required — GitHub auto-closes it on merge.
+- Use `#N` (bare reference) when the PR relates to an issue but does not fully close it.
 
 ```
 Closes #42
 
+---
+
 The rest of the body here...
 ```
 
-GitHub will auto-close the issue when the PR is merged. Do **not** add `Closes #N` if:
+Multiple issues stack on separate lines before the divider:
+
+```
+Closes #18
+Closes #19
+#20
+
+---
+
+The rest of the body here...
+```
+
+Do **not** use `Closes #N` if:
 - The issue requires manual verification after the change lands
 - The PR is one step toward resolving the issue but more work remains
 - There is any ambiguity about whether the issue is fully addressed
