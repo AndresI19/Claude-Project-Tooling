@@ -92,9 +92,10 @@ def main():
         commit_message = meta["commit_message"]
         pr_title       = meta["pr_title"]
         pr_body        = meta["pr_body"]
+        labels         = meta.get("labels", [])
     except (json.JSONDecodeError, KeyError) as exc:
         print(f"ERROR: --meta is invalid — {exc}")
-        print(f"  Expected: {{\"branch_name\": \"...\", \"commit_message\": \"...\", \"pr_title\": \"...\", \"pr_body\": \"...\"}}")
+        print(f"  Expected: {{\"branch_name\": \"...\", \"commit_message\": \"...\", \"pr_title\": \"...\", \"pr_body\": \"...\", \"labels\": [...]}}")
         print(f"  Got: {args.meta}")
         sys.exit(1)
 
@@ -174,6 +175,12 @@ def main():
         cwd=repo,
     )
     print(f"\nPR: {pr_url}")
+
+    # Apply labels
+    if labels:
+        pr_number = pr_url.rstrip("/").split("/")[-1]
+        run(["gh", "pr", "edit", pr_number, "--repo", gh_repo, "--add-label", ",".join(labels)], cwd=repo)
+        print(f"Labels: {', '.join(labels)}")
 
     # PR list
     prs_raw = run(
