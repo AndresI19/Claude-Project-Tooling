@@ -10,6 +10,7 @@ Sounds:
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +24,7 @@ def play(name):
         ["aplay", "-q", str(SFX_DIR / name)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        preexec_fn=os.setsid,
     )
 
 
