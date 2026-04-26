@@ -14,6 +14,7 @@ Defaults to AndresI19's project #5. Override with --owner / --project-number.
 import argparse
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -36,6 +37,16 @@ LABEL_COLORS = {
 }
 
 
+_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+def visible_len(s):
+    return len(_ANSI_RE.sub("", s))
+
+def ljust_visible(s, width):
+    pad = width - visible_len(s)
+    return s + (" " * max(pad, 0))
+
+
 def ansi_bg(r, g, b): return f"\033[48;2;{r};{g};{b}m"
 def ansi_fg(r, g, b): return f"\033[38;2;{r};{g};{b}m"
 
@@ -56,7 +67,7 @@ def print_table(items, status_label):
         labels_str = " ".join(color_label(l) for l in item["labels"]) if item["labels"] else ""
         num_badge  = f"{DIM}#{item['number']}{RESET}"
         # Column order: index · title · labels · issue number
-        print(f"  {BOLD}{i}){RESET}  {item['title']:<50}  {labels_str:<30}  {num_badge}")
+        print(f"  {BOLD}{i}){RESET}  {item['title']:<50}  {ljust_visible(labels_str, 30)}  {num_badge}")
     print(f"  {BOLD}0){RESET}  Cancel\n")
 
 

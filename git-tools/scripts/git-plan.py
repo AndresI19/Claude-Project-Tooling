@@ -14,14 +14,13 @@ Status is only assigned to newly created issues — existing items are never ove
 import argparse
 import json
 import os
-import subprocess
 import sys
 
-# Allow importing issue_utils from the same directory regardless of cwd.
+# Allow importing siblings regardless of cwd.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import github_client  # noqa: E402
 from issue_utils import (  # noqa: E402
-    run, run_silent,
-    get_or_create_issue, issue_number_from_url, append_blocked_by,
+    get_or_create_issue, append_blocked_by,
     get_project_node_id, set_item_status,
 )
 
@@ -31,44 +30,68 @@ RESET = "\033[0m"
 
 # ── Pre-flight ────────────────────────────────────────────────────────────────
 
-def check_auth_scopes():
-    """Exit with a clear message if the gh token is missing the project scope."""
-    result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
-    output = result.stdout + result.stderr
-    scopes_line = next((l for l in output.splitlines() if "Token scopes" in l), "")
-    if "project" not in scopes_line:
-        print("ERROR: gh token is missing required scopes.")
-        print("  Run in a terminal: gh auth refresh -s project,read:project")
+def check_auth():
+    """Verify the token is valid and warn if project scope can't be confirmed."""
+    scopes = github_client.token_scopes()
+    if scopes and "project" not in scopes:
+        print("ERROR: GitHub token is missing the 'project' scope.")
+        print("  Run: python3 github_client.py --set-token")
         sys.exit(1)
+    if not scopes:
+        # Fine-grained PAT — scopes not advertised; permission errors surface at call time.
+        pass
 
 
 # ── Project helpers ───────────────────────────────────────────────────────────
 
-def create_or_find_project(owner, title, repo):
-    """Create a GitHub Project, link it to repo, and return (number, url, node_id)."""
-    result = subprocess.run(
-        ["gh", "project", "create", "--owner", owner, "--title", title, "--format", "json"],
-        capture_output=True, text=True
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        data    = json.loads(result.stdout)
-        number  = data["number"]
-        url     = data["url"]
-        run(["gh", "project", "link", str(number), "--owner", owner, "--repo", repo],
-            description=f"link project #{number} to {repo}")
-        node_id = get_project_node_id(owner, number)
-        return number, url, node_id
+def _get_owner_node_id(owner):
+    q = """query($login: String!) { user(login: $login) { id } }"""
+    return github_client.graphql(q, {"login": owner})["data"]["user"]["id"]
 
-    list_out = run(["gh", "project", "list", "--owner", owner, "--format", "json"],
-                   description="gh project list")
-    for p in json.loads(list_out).get("projects", []):
+
+def create_or_find_project(owner, title, repo):
+    """Create a GitHub Project V2, link it to repo, and return (number, url, node_id).
+
+    Checks for an existing project with the same title first to make re-runs safe.
+    """
+    # Check for existing project
+    list_q = """
+query($login: String!, $first: Int!) {
+  user(login: $login) {
+    projectsV2(first: $first) {
+      nodes { id number title url }
+    }
+  }
+}"""
+    data = github_client.graphql(list_q, {"login": owner, "first": 50})
+    for p in data["data"]["user"]["projectsV2"]["nodes"]:
         if p["title"] == title:
             print(f"  (project already exists — reusing #{p['number']})")
-            node_id = get_project_node_id(owner, p["number"])
-            return p["number"], p["url"], node_id
+            return p["number"], p["url"], p["id"]
 
-    print(f"ERROR: could not create or find project '{title}'")
-    sys.exit(1)
+    # Create new project
+    owner_id = _get_owner_node_id(owner)
+    create_m = """
+mutation($ownerId: ID!, $title: String!) {
+  createProjectV2(input: {ownerId: $ownerId, title: $title}) {
+    projectV2 { id number url }
+  }
+}"""
+    project = github_client.graphql(create_m, {"ownerId": owner_id, "title": title})
+    project = project["data"]["createProjectV2"]["projectV2"]
+
+    # Link to repo
+    repo_data   = github_client.rest("GET", f"/repos/{repo}")
+    repo_nid    = repo_data["node_id"]
+    link_m = """
+mutation($projectId: ID!, $repositoryId: ID!) {
+  linkProjectV2ToRepository(input: {projectId: $projectId, repositoryId: $repositoryId}) {
+    repository { id }
+  }
+}"""
+    github_client.graphql(link_m, {"projectId": project["id"], "repositoryId": repo_nid})
+
+    return project["number"], project["url"], project["id"]
 
 
 # ── Status field helpers ──────────────────────────────────────────────────────
@@ -101,12 +124,8 @@ query($login: String!, $number: Int!) {
     }
   }
 }"""
-    out = run(["gh", "api", "graphql",
-               "-f", f"query={query}",
-               "-f", f"login={owner}",
-               "-F", f"number={project_number}"],
-              description="query project status field")
-    nodes = json.loads(out)["data"]["user"]["projectV2"]["fields"]["nodes"]
+    data  = github_client.graphql(query, {"login": owner, "number": project_number})
+    nodes = data["data"]["user"]["projectV2"]["fields"]["nodes"]
     status = next((n for n in nodes if n.get("name") == "Status"), None)
     if not status:
         print("  WARNING: Status field not found — skipping")
@@ -114,54 +133,81 @@ query($login: String!, $number: Int!) {
 
     field_id       = status["id"]
     existing_names = {o["name"] for o in status["options"]}
-    all_options    = list(status["options"])
     to_add         = [s for s in EXTRA_STATUSES if s["name"] not in existing_names]
 
     if not to_add:
         print("  (status options already configured)")
         return field_id, {o["name"]: o["id"] for o in status["options"]}
 
-    all_options += to_add
-    opts_gql = " ".join(
-        f'{{name: "{o["name"]}", color: {o["color"]}, description: "{o["description"]}"}}'
-        for o in all_options
-    )
-    mutation = f"""
-mutation {{
-  updateProjectV2Field(input: {{
-    fieldId: "{field_id}"
-    singleSelectOptions: [{opts_gql}]
-  }}) {{
-    projectV2Field {{
-      ... on ProjectV2SingleSelectField {{
+    all_options = [
+        {"name": o["name"], "color": o["color"], "description": o.get("description", "")}
+        for o in status["options"]
+    ] + to_add
+
+    mutation = """
+mutation($fieldId: ID!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+  updateProjectV2Field(input: {
+    fieldId: $fieldId
+    singleSelectOptions: $options
+  }) {
+    projectV2Field {
+      ... on ProjectV2SingleSelectField {
         id
-        options {{ id name }}
-      }}
-    }}
-  }}
-}}"""
-    mut_out = run(["gh", "api", "graphql", "-f", f"query={mutation}"],
-                  description="update project status options")
+        options { id name }
+      }
+    }
+  }
+}"""
+    mut_data = github_client.graphql(mutation, {"fieldId": field_id, "options": all_options})
     print(f"  Added: {', '.join(s['name'] for s in to_add)}")
 
-    # The mutation returns fresh option IDs — build the full name→id map.
-    updated_opts = (json.loads(mut_out)["data"]["updateProjectV2Field"]
-                    ["projectV2Field"]["options"])
+    updated_opts = mut_data["data"]["updateProjectV2Field"]["projectV2Field"]["options"]
     return field_id, {o["name"]: o["id"] for o in updated_opts}
 
 
 # ── Issue helpers ─────────────────────────────────────────────────────────────
 
 def load_existing_issues(repo):
-    """Fetch all issues (open and closed) and return a title → {number, url} dict.
+    """Fetch all issues (open and closed) and return a title → {number, url, node_id} dict.
 
     Includes closed issues so re-runs don't recreate completed work.
     """
-    out, ok = run_silent(["gh", "issue", "list", "--repo", repo,
-                          "--state", "all", "--json", "number,title,url", "--limit", "500"])
-    if not ok or not out:
-        return {}
-    return {i["title"]: {"number": i["number"], "url": i["url"]} for i in json.loads(out)}
+    result = {}
+    page   = 1
+    while True:
+        issues = github_client.rest("GET", f"/repos/{repo}/issues",
+                                    params={"state": "all", "per_page": 100, "page": page})
+        if not issues:
+            break
+        for issue in issues:
+            if "pull_request" in issue:
+                continue
+            result[issue["title"]] = {
+                "number":  issue["number"],
+                "url":     issue["html_url"],
+                "node_id": issue["node_id"],
+            }
+        if len(issues) < 100:
+            break
+        page += 1
+    return result
+
+
+# ── Project item helpers ──────────────────────────────────────────────────────
+
+def add_item_to_project(project_id, content_node_id):
+    """Add an issue to a project V2. Idempotent — returns item ID whether new or existing."""
+    mutation = """
+mutation($projectId: ID!, $contentId: ID!) {
+  addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+    item { id }
+  }
+}"""
+    data = github_client.graphql(mutation, {
+        "projectId": project_id,
+        "contentId": content_node_id,
+    })
+    return data["data"]["addProjectV2ItemById"]["item"]["id"]
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -180,8 +226,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # Pre-flight
-    check_auth_scopes()
+    check_auth()
 
     try:
         meta          = json.loads(args.meta)
@@ -230,13 +275,13 @@ def main():
         if epic.get("description"):
             placeholder = epic["description"] + "\n\n" + placeholder
 
-        number, url, created = get_or_create_issue(
+        number, url, node_id, created = get_or_create_issue(
             repo, epic["title"], placeholder, ["Epic"], existing
         )
         create_status = "created" if created else "exists"
         epic_records.append({
-            "epic": epic, "number": number, "url": url,
-            "status": epic.get("status", "Todo"),
+            "epic":    epic, "number": number, "url": url, "node_id": node_id,
+            "status":  epic.get("status", "Todo"),
             "created": created,
             "children": [],
         })
@@ -248,7 +293,7 @@ def main():
     print("Issues...")
     for record in epic_records:
         for issue in record["epic"]["issues"]:
-            number, url, created = get_or_create_issue(
+            number, url, node_id, created = get_or_create_issue(
                 repo,
                 issue["title"],
                 issue.get("description", ""),
@@ -257,7 +302,10 @@ def main():
             )
             create_status = "created" if created else "exists"
             record["children"].append({
-                "number": number, "url": url, "title": issue["title"],
+                "number":     number,
+                "url":        url,
+                "node_id":    node_id,
+                "title":      issue["title"],
                 "status":     issue.get("status", "Ready"),
                 "blocked_by": issue.get("blocked_by", []),
                 "created":    created,
@@ -301,10 +349,8 @@ def main():
         if record["epic"].get("description"):
             linked = record["epic"]["description"] + "\n\n" + linked
 
-        run(["gh", "issue", "edit", str(record["number"]),
-             "--repo", repo,
-             "--body", linked],
-            description=f"link epic #{record['number']}")
+        github_client.rest("PATCH", f"/repos/{repo}/issues/{record['number']}",
+                           json={"body": linked})
         print(f"  Epic #{record['number']} → {len(record['children'])} issues linked")
 
     print()
@@ -312,25 +358,19 @@ def main():
     # ── Step 5: Add all items to project; set status only for new items ───────
     print("Adding items to project...")
     all_items = (
-        [{"url": r["url"], "status": r["status"], "created": r["created"]} for r in epic_records] +
-        [{"url": c["url"], "status": c["status"], "created": c["created"]}
+        [{"node_id": r["node_id"], "status": r["status"], "created": r["created"]}
+         for r in epic_records] +
+        [{"node_id": c["node_id"], "status": c["status"], "created": c["created"]}
          for r in epic_records for c in r["children"]]
     )
-    added = skipped = 0
     for item in all_items:
-        out, ok = run_silent(["gh", "project", "item-add", str(project_number),
-                              "--owner", owner, "--url", item["url"], "--format", "json"])
-        if ok:
-            added += 1
-            if item["created"] and status_field_id and status_options and out:
-                item_id   = json.loads(out).get("id")
-                option_id = status_options.get(item["status"])
-                if item_id and option_id:
-                    set_item_status(project_id, item_id, status_field_id, option_id)
-        else:
-            skipped += 1
+        item_id   = add_item_to_project(project_id, item["node_id"])
+        if item["created"] and status_field_id and status_options:
+            option_id = status_options.get(item["status"])
+            if option_id:
+                set_item_status(project_id, item_id, status_field_id, option_id)
 
-    print(f"{BLUE}→ {added} items added, {skipped} already in project{RESET}\n")
+    print(f"{BLUE}→ {len(all_items)} items added to project{RESET}\n")
     print(f"Done.  {project_url}")
 
 

@@ -8,21 +8,24 @@ CLI usage:
     python3 issue_utils.py --repo OWNER/REPO --title "..." --body "..." --label Code --label Inquiry
 
 Library usage:
-    from issue_utils import run, run_silent, get_or_create_issue, issue_number_from_url,
-                            append_blocked_by, get_project_node_id, set_item_status,
-                            query_project, items_by_status, set_item_status_by_name
+    from issue_utils import (
+        get_or_create_issue, append_blocked_by,
+        get_project_node_id, set_item_status,
+        query_project, items_by_status, set_item_status_by_name,
+    )
 """
 
 import argparse
-import json
-import re
-import subprocess
+import os
 import sys
+
+# Allow importing github_client from the same directory regardless of cwd.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import github_client  # noqa: E402
 
 
 # ── Standard label vocabulary ─────────────────────────────────────────────────
 # Authoritative list shared across git-plan, /todo, and init_labels.
-# PR complexity labels are omitted here — those are applied by reviewers, not at issue creation.
 
 ISSUE_LABELS = [
     {"name": "Epic",         "description": "Tracks a broader goal composed of multiple tasks"},
@@ -37,61 +40,29 @@ ISSUE_LABELS = [
 ISSUE_LABEL_NAMES = [l["name"] for l in ISSUE_LABELS]
 
 
-# ── Shell helpers ─────────────────────────────────────────────────────────────
-
-def run(args, description=None):
-    if isinstance(args, str):
-        args = ["bash", "-c", args]
-    result = subprocess.run(args, capture_output=True, text=True)
-    if result.returncode != 0:
-        label = description or (" ".join(args) if isinstance(args, list) else args)
-        print(f"\nERROR: {label} failed (exit {result.returncode})")
-        if result.stdout.strip():
-            print(f"  STDOUT: {result.stdout.strip()}")
-        if result.stderr.strip():
-            print(f"  STDERR: {result.stderr.strip()}")
-        sys.exit(1)
-    return result.stdout.strip()
-
-
-def run_silent(args):
-    if isinstance(args, str):
-        args = ["bash", "-c", args]
-    result = subprocess.run(args, capture_output=True, text=True)
-    return result.stdout.strip(), result.returncode == 0
-
-
 # ── Issue helpers ─────────────────────────────────────────────────────────────
 
-def issue_number_from_url(url):
-    match = re.search(r"/issues/(\d+)$", url)
-    if not match:
-        print(f"ERROR: could not parse issue number from: {url}")
-        sys.exit(1)
-    return int(match.group(1))
-
-
 def get_or_create_issue(repo, title, body, labels, existing=None):
-    """Return (number, url, created).
+    """Return (number, url, node_id, created).
 
     If existing dict is provided, skips creation when title is already present
     and updates the dict on creation. Pass existing=None to always create.
     """
     if existing is not None and title in existing:
         entry = existing[title]
-        return entry["number"], entry["url"], False
+        return entry["number"], entry["url"], entry["node_id"], False
 
-    label_flags = [flag for label in labels for flag in ("--label", label)]
-    url = run(["gh", "issue", "create",
-               "--repo",  repo,
-               "--title", title,
-               "--body",  body,
-               *label_flags],
-              description=f"create issue: {title}")
-    number = issue_number_from_url(url)
+    data = github_client.rest("POST", f"/repos/{repo}/issues", json={
+        "title":  title,
+        "body":   body,
+        "labels": labels,
+    })
+    number  = data["number"]
+    url     = data["html_url"]
+    node_id = data["node_id"]
     if existing is not None:
-        existing[title] = {"number": number, "url": url}
-    return number, url, True
+        existing[title] = {"number": number, "url": url, "node_id": node_id}
+    return number, url, node_id, True
 
 
 def append_blocked_by(repo, issue_number, current_body, blocker_numbers_titles):
@@ -102,9 +73,7 @@ def append_blocked_by(repo, issue_number, current_body, blocker_numbers_titles):
         if current_body.strip()
         else f"## Blocked By\n{lines}"
     )
-    run(["gh", "issue", "edit", str(issue_number),
-         "--repo", repo, "--body", new_body],
-        description=f"add blocked-by to #{issue_number}")
+    github_client.rest("PATCH", f"/repos/{repo}/issues/{issue_number}", json={"body": new_body})
 
 
 # ── Project board helpers ─────────────────────────────────────────────────────
@@ -117,71 +86,70 @@ query($login: String!, $number: Int!) {
     projectV2(number: $number) { id }
   }
 }"""
-    out = run(["gh", "api", "graphql",
-               "-f", f"query={query}",
-               "-f", f"login={owner}",
-               "-F", f"number={project_number}"],
-              description="query project node id")
-    return json.loads(out)["data"]["user"]["projectV2"]["id"]
+    data = github_client.graphql(query, {"login": owner, "number": project_number})
+    return data["data"]["user"]["projectV2"]["id"]
 
 
 def set_item_status(project_id, item_id, field_id, option_id):
     """Set a project item's Status field given pre-resolved GraphQL IDs."""
-    mutation = f"""
-mutation {{
-  updateProjectV2ItemFieldValue(input: {{
-    projectId: "{project_id}"
-    itemId: "{item_id}"
-    fieldId: "{field_id}"
-    value: {{ singleSelectOptionId: "{option_id}" }}
-  }}) {{
-    projectV2Item {{ id }}
-  }}
-}}"""
-    run(["gh", "api", "graphql", "-f", f"query={mutation}"],
-        description=f"set status on item {item_id}")
+    mutation = """
+mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+  updateProjectV2ItemFieldValue(input: {
+    projectId: $projectId
+    itemId: $itemId
+    fieldId: $fieldId
+    value: { singleSelectOptionId: $optionId }
+  }) {
+    projectV2Item { id }
+  }
+}"""
+    github_client.graphql(mutation, {
+        "projectId": project_id,
+        "itemId":    item_id,
+        "fieldId":   field_id,
+        "optionId":  option_id,
+    })
 
 
 def query_project(owner, project_number):
     """Return raw project data: id, status field options, and all items with issue details."""
-    query = f"""
-query {{
-  user(login: "{owner}") {{
-    projectV2(number: {project_number}) {{
+    query = """
+query($login: String!, $number: Int!) {
+  user(login: $login) {
+    projectV2(number: $number) {
       id
-      fields(first: 20) {{
-        nodes {{
-          ... on ProjectV2SingleSelectField {{
+      fields(first: 20) {
+        nodes {
+          ... on ProjectV2SingleSelectField {
             id name
-            options {{ id name }}
-          }}
-        }}
-      }}
-      items(first: 100) {{
-        nodes {{
+            options { id name }
+          }
+        }
+      }
+      items(first: 100) {
+        nodes {
           id
-          fieldValues(first: 20) {{
-            nodes {{
-              ... on ProjectV2ItemFieldSingleSelectValue {{
+          fieldValues(first: 20) {
+            nodes {
+              ... on ProjectV2ItemFieldSingleSelectValue {
                 name
-                field {{ ... on ProjectV2SingleSelectField {{ name }} }}
-              }}
-            }}
-          }}
-          content {{
-            ... on Issue {{
+                field { ... on ProjectV2SingleSelectField { name } }
+              }
+            }
+          }
+          content {
+            ... on Issue {
               number title state url
-              labels(first: 10) {{ nodes {{ name }} }}
-            }}
-          }}
-        }}
-      }}
-    }}
-  }}
-}}"""
-    out = run(["gh", "api", "graphql", "-f", f"query={query}"],
-              description="query project items")
-    return json.loads(out)["data"]["user"]["projectV2"]
+              labels(first: 10) { nodes { name } }
+            }
+          }
+        }
+      }
+    }
+  }
+}"""
+    data = github_client.graphql(query, {"login": owner, "number": project_number})
+    return data["data"]["user"]["projectV2"]
 
 
 def items_by_status(project_data, status_filter=None):
@@ -229,9 +197,7 @@ def set_item_status_by_name(project_data, item_id, target_status):
 # ── CLI entry point (used by /todo) ──────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Create a GitHub issue with standard labels"
-    )
+    parser = argparse.ArgumentParser(description="Create a GitHub issue with standard labels")
     parser.add_argument("--repo",  required=True, help="OWNER/REPO")
     parser.add_argument("--title", required=True, help="Issue title")
     parser.add_argument("--body",  default="",    help="Issue body")
@@ -245,7 +211,7 @@ def main():
         print(f"  Valid labels: {', '.join(ISSUE_LABEL_NAMES)}")
         sys.exit(1)
 
-    _, url, _ = get_or_create_issue(args.repo, args.title, args.body, args.labels)
+    _, url, _, _ = get_or_create_issue(args.repo, args.title, args.body, args.labels)
     print(url)
 
 
