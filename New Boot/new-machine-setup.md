@@ -8,7 +8,12 @@
 
 ## 1. Prerequisites
 
-Ensure your user has sudo access and the following are available:
+Update all system packages before installing anything:
+```bash
+sudo dnf update --refresh
+```
+
+Then confirm your user has sudo access and the following are available:
 ```bash
 sudo -v           # confirm sudo works
 curl --version
