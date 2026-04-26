@@ -194,6 +194,71 @@ def set_item_status_by_name(project_data, item_id, target_status):
     set_item_status(project_data["id"], item_id, status_field["id"], option["id"])
 
 
+# ── Active-project helpers ────────────────────────────────────────────────────
+
+def find_active_project(owner):
+    """Return the first project that has open issues, or None if all are clear."""
+    query = """
+query($login: String!, $first: Int!) {
+  user(login: $login) {
+    projectsV2(first: $first) {
+      nodes {
+        number title url
+        items(first: 100) {
+          nodes {
+            content { ... on Issue { state } }
+          }
+        }
+      }
+    }
+  }
+}"""
+    data = github_client.graphql(query, {"login": owner, "first": 20})
+    for project in data["data"]["user"]["projectsV2"]["nodes"]:
+        has_open = any(
+            (item.get("content") or {}).get("state", "").upper() == "OPEN"
+            for item in project["items"]["nodes"]
+        )
+        if has_open:
+            return project
+    return None
+
+
+def advance_ready(project_data, repo):
+    """Promote Todo/Backlog items to Ready when all their listed blockers are closed.
+
+    Reads '## Blocked By' sections from issue bodies. Skips Epics.
+    Returns a list of (number, title) tuples for items that were promoted.
+    """
+    import re
+    candidates = [
+        item for item in items_by_status(project_data, None)
+        if item["status"] in ("Todo", "Backlog")
+        and item["state"] == "OPEN"
+        and "Epic" not in item["labels"]
+    ]
+    promoted = []
+    for item in candidates:
+        issue = github_client.rest("GET", f"/repos/{repo}/issues/{item['number']}")
+        body = issue.get("body") or ""
+        if "## Blocked By" in body:
+            section = body.split("## Blocked By", 1)[1]
+            section = re.split(r"\n##", section)[0]
+            blocker_nums = [int(m) for m in re.findall(r"#(\d+)", section)]
+        else:
+            blocker_nums = []
+        if blocker_nums:
+            states = [
+                github_client.rest("GET", f"/repos/{repo}/issues/{n}").get("state", "").lower()
+                for n in blocker_nums
+            ]
+            if not all(s == "closed" for s in states):
+                continue
+        set_item_status_by_name(project_data, item["item_id"], "Ready")
+        promoted.append((item["number"], item["title"]))
+    return promoted
+
+
 # ── CLI entry point (used by /todo) ──────────────────────────────────────────
 
 def main():

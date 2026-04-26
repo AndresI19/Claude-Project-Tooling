@@ -22,6 +22,7 @@ import github_client  # noqa: E402
 from issue_utils import (  # noqa: E402
     get_or_create_issue, append_blocked_by,
     get_project_node_id, set_item_status,
+    find_active_project,
 )
 
 BLUE  = "\033[34m"
@@ -239,6 +240,19 @@ def main():
         sys.exit(1)
 
     owner        = repo.split("/")[0]
+
+    # ── Active-project guard ──────────────────────────────────────────────────
+    if not args.project_number:
+        active = find_active_project(owner)
+        if active:
+            print(f"ERROR: An active project already has open issues.")
+            print(f"  #{active['number']}: {active['title']}")
+            print(f"  {active['url']}")
+            print()
+            print("Resolve or close existing issues before creating a new project.")
+            print("To advance newly-unblocked items to Ready, run:")
+            print("  python3 project_items.py --advance-ready")
+            sys.exit(1)
     total_issues = sum(len(e["issues"]) for e in epics)
 
     print(f"Repo:    {repo}")

@@ -39,9 +39,15 @@ def main():
     tool_response = payload.get("tool_response", "")
     response_str  = tool_response if isinstance(tool_response, str) else json.dumps(tool_response)
 
-    # User selected from list via /new-task or similar skill
     if tool_name == "Bash":
         command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+
+        # Items fetched for a selection menu — play cue before menu is rendered
+        if "project_items.py" in command and "--status" in command and "--set-status" not in command:
+            play("user-select.wav")
+            return
+
+        # User confirmed a selection via /new-task or similar skill
         if "project_items.py" in command and "--set-status" in command:
             play("user-select.wav")
             return

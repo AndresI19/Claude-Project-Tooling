@@ -18,7 +18,10 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from issue_utils import query_project, items_by_status, set_item_status_by_name
+from issue_utils import (
+    query_project, items_by_status, set_item_status_by_name,
+    advance_ready,
+)
 
 RESET = "\033[0m"
 BOLD  = "\033[1m"
@@ -75,12 +78,16 @@ def main():
     parser = argparse.ArgumentParser(description="Query and update GitHub Project items")
     parser.add_argument("--owner",          default="AndresI19")
     parser.add_argument("--project-number", type=int, default=5)
+    parser.add_argument("--repo",           default="AndresI19/RS-Agent-Planning",
+                        help="OWNER/REPO — used by --advance-ready to fetch issue bodies")
     parser.add_argument("--status",         default="Ready",
                         help="Filter items by status name (default: Ready)")
     parser.add_argument("--json",           action="store_true",
                         help="Output JSON instead of colored table")
     parser.add_argument("--set-status",     nargs=2, metavar=("ITEM_ID", "STATUS"),
                         help="Move ITEM_ID to STATUS and exit")
+    parser.add_argument("--advance-ready",  action="store_true",
+                        help="Promote Todo/Backlog items to Ready when all blockers are closed")
     args = parser.parse_args()
 
     project_data = query_project(args.owner, args.project_number)
@@ -89,6 +96,16 @@ def main():
         item_id, target = args.set_status
         set_item_status_by_name(project_data, item_id, target)
         print(f"{GREEN}✓{RESET} Status → {target}")
+        return
+
+    if args.advance_ready:
+        promoted = advance_ready(project_data, args.repo)
+        if promoted:
+            for number, title in promoted:
+                print(f"{GREEN}✓{RESET} #{number} {title} → Ready")
+            print(f"\n{len(promoted)} item(s) promoted to Ready.")
+        else:
+            print("No items ready to advance (blockers still open or no Todo/Backlog items).")
         return
 
     items = items_by_status(project_data, args.status)
