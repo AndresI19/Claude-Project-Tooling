@@ -1,27 +1,23 @@
 #!/usr/bin/env python3
 """
-project_items.py — Query and update GitHub Project V2 items by status.
+project_items.py — List and update GitHub Project V2 items by status.
 
 Usage:
-    python3 project_items.py                          # list Ready items, colored table
-    python3 project_items.py --status Todo            # filter by status name
-    python3 project_items.py --json                   # JSON output for skill consumption
-    python3 project_items.py --set-status ITEM_ID "In Progress"  # move an item
-
-Defaults to AndresI19's project #5. Override with --owner / --project-number.
+    python3 project_items.py                         # list Ready items, colored table
+    python3 project_items.py --status Todo           # filter by status
+    python3 project_items.py --json                  # JSON output
+    python3 project_items.py --set-status ID STATUS  # move an item
 """
-
 import argparse
 import json
 import os
-import re
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from issue_utils import (
-    query_project, items_by_status, set_item_status_by_name,
-    advance_ready,
-)
+LIB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib")
+sys.path.insert(0, LIB)
+from github_client import load_config
+from project import query_project, items_by_status, set_item_status_by_name
+from display import ansi_bg, ansi_fg, ljust_visible, color_label
 
 RESET = "\033[0m"
 BOLD  = "\033[1m"
@@ -39,26 +35,9 @@ LABEL_COLORS = {
     "service: mcp": {"bg": (224, 64,  251), "fg": (255, 255, 255)},
 }
 
-
-_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
-
-def visible_len(s):
-    return len(_ANSI_RE.sub("", s))
-
-def ljust_visible(s, width):
-    pad = width - visible_len(s)
-    return s + (" " * max(pad, 0))
-
-
-def ansi_bg(r, g, b): return f"\033[48;2;{r};{g};{b}m"
-def ansi_fg(r, g, b): return f"\033[38;2;{r};{g};{b}m"
-
-
-def color_label(name):
-    style = LABEL_COLORS.get(name.lower())
-    if not style:
-        return f" {name} "
-    return f"{ansi_bg(*style['bg'])}{ansi_fg(*style['fg'])} {name} {RESET}"
+_cfg = load_config()
+_OWNER          = _cfg["owner"]
+_PROJECT_NUMBER = _cfg["project_number"]
 
 
 def print_table(items, status_label):
@@ -67,53 +46,46 @@ def print_table(items, status_label):
         return
     print(f"\n{BOLD}{BLUE}  {status_label} ({len(items)}){RESET}\n")
     for i, item in enumerate(items, 1):
-        labels_str = " ".join(color_label(l) for l in item["labels"]) if item["labels"] else ""
+        labels_str = " ".join(color_label(l, LABEL_COLORS) for l in item["labels"]) if item["labels"] else ""
         num_badge  = f"{DIM}#{item['number']}{RESET}"
-        # Column order: index · title · labels · issue number
         print(f"  {BOLD}{i}){RESET}  {item['title']:<50}  {ljust_visible(labels_str, 30)}  {num_badge}")
     print(f"  {BOLD}0){RESET}  Cancel\n")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Query and update GitHub Project items")
-    parser.add_argument("--owner",          default="AndresI19")
-    parser.add_argument("--project-number", type=int, default=5)
-    parser.add_argument("--repo",           default="AndresI19/RS-Agent-Planning",
-                        help="OWNER/REPO — used by --advance-ready to fetch issue bodies")
-    parser.add_argument("--status",         default="Ready",
-                        help="Filter items by status name (default: Ready)")
-    parser.add_argument("--json",           action="store_true",
-                        help="Output JSON instead of colored table")
-    parser.add_argument("--set-status",     nargs=2, metavar=("ITEM_ID", "STATUS"),
-                        help="Move ITEM_ID to STATUS and exit")
-    parser.add_argument("--advance-ready",  action="store_true",
-                        help="Promote Todo/Backlog items to Ready when all blockers are closed")
-    args = parser.parse_args()
-
-    project_data = query_project(args.owner, args.project_number)
-
-    if args.set_status:
-        item_id, target = args.set_status
-        set_item_status_by_name(project_data, item_id, target)
-        print(f"{GREEN}✓{RESET} Status → {target}")
-        return
-
-    if args.advance_ready:
-        promoted = advance_ready(project_data, args.repo)
-        if promoted:
-            for number, title in promoted:
-                print(f"{GREEN}✓{RESET} #{number} {title} → Ready")
-            print(f"\n{len(promoted)} item(s) promoted to Ready.")
-        else:
-            print("No items ready to advance (blockers still open or no Todo/Backlog items).")
-        return
-
-    items = items_by_status(project_data, args.status)
-
-    if args.json:
+def list_items(status="Ready", json_output=False,
+               owner=_OWNER, project_number=_PROJECT_NUMBER):
+    """List project items for a given status. Prints table or JSON."""
+    project_data = query_project(owner, project_number)
+    items = items_by_status(project_data, status)
+    if json_output:
         print(json.dumps(items, indent=2))
     else:
-        print_table(items, args.status)
+        print_table(items, status)
+
+
+def update_status(item_id, target,
+                  owner=_OWNER, project_number=_PROJECT_NUMBER):
+    """Move a project item to a new status by name."""
+    project_data = query_project(owner, project_number)
+    set_item_status_by_name(project_data, item_id, target)
+    print(f"{GREEN}✓{RESET} Status → {target}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Query and update GitHub Project items")
+    parser.add_argument("--owner",          default=_OWNER)
+    parser.add_argument("--project-number", type=int, default=_PROJECT_NUMBER)
+    parser.add_argument("--status",         default="Ready")
+    parser.add_argument("--json",           action="store_true")
+    parser.add_argument("--set-status",     nargs=2, metavar=("ITEM_ID", "STATUS"))
+    args = parser.parse_args()
+
+    if args.set_status:
+        update_status(args.set_status[0], args.set_status[1],
+                      owner=args.owner, project_number=args.project_number)
+    else:
+        list_items(status=args.status, json_output=args.json,
+                   owner=args.owner, project_number=args.project_number)
 
 
 if __name__ == "__main__":

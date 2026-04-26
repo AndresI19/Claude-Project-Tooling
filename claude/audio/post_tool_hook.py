@@ -43,12 +43,12 @@ def main():
         command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
 
         # Items fetched for a selection menu — play cue before menu is rendered
-        if "project_items.py" in command and "--status" in command and "--set-status" not in command:
+        if "ready_items.py" in command or "status_items.py" in command:
             play("user-select.wav")
             return
 
-        # User confirmed a selection via /new-task or similar skill
-        if "project_items.py" in command and "--set-status" in command:
+        # User confirmed a selection — item moved to a new status
+        if "set_status.py" in command:
             play("user-select.wav")
             return
 
