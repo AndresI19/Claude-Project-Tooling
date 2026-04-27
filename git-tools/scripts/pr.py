@@ -176,10 +176,25 @@ def main():
     )
     print(f"\nPR: {pr_url}")
 
-    # Apply labels
+    # Apply labels — auto-init defaults on remote if any are missing
     if labels:
         pr_number = pr_url.rstrip("/").split("/")[-1]
-        run(["gh", "pr", "edit", pr_number, "--repo", gh_repo, "--add-label", ",".join(labels)], cwd=repo)
+        label_result = subprocess.run(
+            ["gh", "pr", "edit", pr_number, "--repo", gh_repo, "--add-label", ",".join(labels)],
+            cwd=repo, capture_output=True, text=True,
+        )
+        if label_result.returncode != 0:
+            if "not found" in label_result.stderr:
+                print("Labels missing on remote — initializing defaults...")
+                init_script = str(Path(__file__).parent / "init_labels.py")
+                run([sys.executable, init_script, "--repo", gh_repo], cwd=repo)
+                run(["gh", "pr", "edit", pr_number, "--repo", gh_repo, "--add-label", ",".join(labels)], cwd=repo)
+            else:
+                print(f"\nERROR: command failed (exit {label_result.returncode})")
+                print(f"  CMD:    gh pr edit {pr_number} --repo {gh_repo} --add-label {','.join(labels)}")
+                if label_result.stderr.strip():
+                    print(f"  STDERR: {label_result.stderr.strip()}")
+                sys.exit(1)
         print(f"Labels: {', '.join(labels)}")
 
     # PR list
