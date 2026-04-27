@@ -55,7 +55,7 @@ def run_silent(args, cwd=None):
 # ---------------------------------------------------------------------------
 
 def find_base_branch(repo):
-    remote_branches, _ = run_silent("git branch -r", cwd=repo)
+    remote_branches, _ = run_silent(["git", "branch", "-r"], cwd=repo)
     if "origin/main" in remote_branches:
         return "main"
     if "origin/develop" in remote_branches:
@@ -64,13 +64,13 @@ def find_base_branch(repo):
 
 
 def is_behind_origin(repo, base):
-    status = run("git status -uno", cwd=repo)
+    status = run(["git", "status", "-uno"], cwd=repo)
     return "behind" in status
 
 
 def has_changes(repo, base):
-    diff_stat = run(f"git diff origin/{base} --stat", cwd=repo)
-    status = run("git status --short", cwd=repo)
+    diff_stat = run(["git", "diff", f"origin/{base}", "--stat"], cwd=repo)
+    status = run(["git", "status", "--short"], cwd=repo)
     return bool(diff_stat or status), diff_stat, status
 
 
@@ -109,7 +109,7 @@ def main():
 
     # Fetch + base branch
     print("Fetching from origin...")
-    run("git fetch origin", cwd=repo)
+    run(["git", "fetch", "origin"], cwd=repo)
 
     base = find_base_branch(repo)
     if not base:
@@ -124,7 +124,7 @@ def main():
         sys.exit(0)
 
     # Current branch + sync state
-    current_branch = run("git branch --show-current", cwd=repo)
+    current_branch = run(["git", "branch", "--show-current"], cwd=repo)
     already_on_base = current_branch == base
     behind = is_behind_origin(repo, base)
 
@@ -138,17 +138,17 @@ def main():
         print(f"Stashing ({reason})...")
         run(["git", "stash", "push", "-u", "-m", "pr-script-stash"], cwd=repo)
         stashed = True
-        run(f"git checkout {base}", cwd=repo)
-        run(f"git pull origin {base}", cwd=repo)
+        run(["git", "checkout", base], cwd=repo)
+        run(["git", "pull", "origin", base], cwd=repo)
     else:
         print("Already on base and up to date — skipping stash/pull.")
 
     # Create branch
-    run_silent(f"git branch -D {branch_name}", cwd=repo)  # delete stale, ignore failure
-    run(f"git checkout -b {branch_name}", cwd=repo)
+    run_silent(["git", "branch", "-D", branch_name], cwd=repo)  # delete stale, ignore failure
+    run(["git", "checkout", "-b", branch_name], cwd=repo)
 
     if stashed:
-        run("git stash pop", cwd=repo)
+        run(["git", "stash", "pop"], cwd=repo)
 
     transition = (
         f"{current_branch} → {base} → {branch_name}"
@@ -158,13 +158,13 @@ def main():
     print(f"{BLUE}→ {Path(repo).name}: {transition}{RESET}")
 
     # Commit + push
-    run("git add -A", cwd=repo)
+    run(["git", "add", "-A"], cwd=repo)
     run(["git", "commit", "-m", commit_message, "-m", CO_AUTHOR], cwd=repo)
-    run(f"git push -u origin {branch_name}", cwd=repo)
+    run(["git", "push", "-u", "origin", branch_name], cwd=repo)
     print(f"{BLUE}→ Publishing {branch_name} to origin{RESET}")
 
     # PR
-    gh_repo = run("gh repo view --json nameWithOwner -q .nameWithOwner", cwd=repo)
+    gh_repo = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], cwd=repo)
     pr_url = run(
         ["gh", "pr", "create",
          "--repo", gh_repo,
@@ -184,12 +184,12 @@ def main():
 
     # PR list
     prs_raw = run(
-        f"gh pr list --repo {gh_repo} --state open "
-        "--json number,title,headRefName,createdAt,url",
+        ["gh", "pr", "list", "--repo", gh_repo, "--state", "open",
+         "--json", "number,title,headRefName,createdAt,url"],
         cwd=repo,
     )
     prs = sorted(json.loads(prs_raw), key=lambda p: p["createdAt"])[:3]
-    total = run(f"gh pr list --repo {gh_repo} --state open --json number", cwd=repo)
+    total = run(["gh", "pr", "list", "--repo", gh_repo, "--state", "open", "--json", "number"], cwd=repo)
     total_count = len(json.loads(total))
     print(f"\nOpen PRs ({total_count} total):")
     for i, pr in enumerate(prs, 1):
