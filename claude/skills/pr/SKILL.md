@@ -52,22 +52,9 @@ Closes #42
 The rest of the body here...
 ```
 
-Multiple issues stack on separate lines before the divider:
+Multiple issues stack on separate lines before the divider — mix `Closes #N` and bare `#N` as appropriate.
 
-```
-Closes #18
-Closes #19
-#20
-
----
-
-The rest of the body here...
-```
-
-Do **not** use `Closes #N` if:
-- The issue requires manual verification after the change lands
-- The PR is one step toward resolving the issue but more work remains
-- There is any ambiguity about whether the issue is fully addressed
+Do **not** use `Closes #N` unless the merge fully resolves the issue with no further verification or follow-up remaining.
 
 When a `Closes` clause is present, issues must **not** be closed via `gh issue close` — the merge handles it. Only use `gh issue close` directly for issues with no associated PR.
 

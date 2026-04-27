@@ -65,7 +65,7 @@ Pass `auto` as the argument if the skill was invoked with `auto`. The script out
    - `## Files Created — YYYY-MM-DD HH:MM` — markdown table of files created or modified (path + description)
    - `## Notes` — important reminders or follow-up items
 3. Only if apps were installed or updated this session: update `~/git-workspace/claude-workspace/Claude-Project-Tooling/dev-workspace-versions.md` (run version commands to get accurate versions; add/update rows, never remove existing entries).
-4. Go to **TOKEN USAGE**, then **PUSH**.
+4. Go to **FINALIZE**.
 
 ---
 
@@ -75,7 +75,7 @@ Pass `auto` as the argument if the skill was invoked with `auto`. The script out
 2. Insert a new summary entry into the existing `## Summary` section (after the last `### ` entry already there).
 3. Append a new `## Terminal Commands — YYYY-MM-DD HH:MM` section and a new `## Files Created — YYYY-MM-DD HH:MM` section at the bottom of the file covering everything done since the last record.
 4. Only if apps were installed or updated this session: update `~/git-workspace/claude-workspace/Claude-Project-Tooling/dev-workspace-versions.md` same as above.
-5. Go to **TOKEN USAGE**, then **PUSH**.
+5. Go to **FINALIZE**.
 
 ---
 
@@ -89,18 +89,14 @@ The `## Summary` section contains one `### YYYY-MM-DD HH:MM` subsection per reco
 ### 2026-04-25 15:38
 **Skills** — created init skill, merged sess-add/append/push-session into record, deleted legacy skills
 **Config** — added claude alias to .bashrc, set bypassPermissions in settings.json, removed Stop hook
-
-### 2026-04-25 17:45
-**PR skill** — reduced from 8 to 5 steps, chained commands, removed redundant fetch+merge
-**Permissions** — fixed dangerouslySkipPermissions schema, added explicit allow rules for git/gh/for/python3/rm
-**Record skill** — combined Step 1 commands, conditional dev-workspace-versions update, chained PUSH
 ```
 
 ---
 
-## TOKEN USAGE
+## FINALIZE
 
-Run:
+Run token usage, then push:
+
 ```bash
 python3 /home/ClaudeSpace/git-workspace/claude-workspace/Claude-Project-Tooling/claude/recording/token_usage.py
 ```
@@ -108,10 +104,6 @@ python3 /home/ClaudeSpace/git-workspace/claude-workspace/Claude-Project-Tooling/
 Replace the session table rows and totals in
 `~/git-workspace/claude-workspace/RS-Agent-Planning/Claude Sessions/Usage/token-usage.md`
 and update the "Last updated" date. The script outputs one `| row |` per session file followed by a `TOTALS` line.
-
----
-
-## PUSH
 
 ```bash
 python3 /home/ClaudeSpace/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/scripts/push_sessions.py --message "MESSAGE"

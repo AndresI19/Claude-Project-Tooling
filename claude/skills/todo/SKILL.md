@@ -60,7 +60,7 @@ From the input text, derive:
 Run:
 
 ```bash
-python3 Claude-Project-Tooling/git-tools/scripts/issue_utils.py \
+python3 Claude-Project-Tooling/git-tools/interface/create_issue.py \
   --repo AndresI19/TARGETREPO \
   --title "TITLE" \
   --body "DESCRIPTION" \
