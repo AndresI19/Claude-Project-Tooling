@@ -34,7 +34,7 @@ Do **not** proceed with the session log until the user confirms how to handle it
 ## Step 1 — Determine action
 
 ```bash
-python3 /home/ClaudeSpace/git-workspace/claude-workspace/Claude-Project-Tooling/claude/recording/session_detect.py [auto]
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/claude/recording/session_detect.py [auto]
 ```
 
 Pass `auto` as the argument if the skill was invoked with `auto`. The script outputs JSON:
@@ -98,7 +98,7 @@ The `## Summary` section contains one `### YYYY-MM-DD HH:MM` subsection per reco
 Run token usage, then push:
 
 ```bash
-python3 /home/ClaudeSpace/git-workspace/claude-workspace/Claude-Project-Tooling/claude/recording/token_usage.py
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/claude/recording/token_usage.py
 ```
 
 Replace the session table rows and totals in
@@ -106,7 +106,7 @@ Replace the session table rows and totals in
 and update the "Last updated" date. The script outputs one `| row |` per session file followed by a `TOTALS` line.
 
 ```bash
-python3 /home/ClaudeSpace/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/scripts/push_sessions.py --message "MESSAGE"
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/scripts/push_sessions.py --message "MESSAGE"
 ```
 
 Use a short descriptive commit message (e.g. "Update Claude Sessions and token usage"). The script only stages and pushes files under `Claude Sessions/` in RS-Agent-Planning. Claude-Project-Tooling is never touched — script changes there must go through `/pr`.

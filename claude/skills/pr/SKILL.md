@@ -21,7 +21,7 @@ Only continue to Step 1 if the user's request is unambiguous.
 
 ## Step 1 — Identify the repo and gather context
 
-From conversation context, determine which single repo under `/home/ClaudeSpace/git-workspace/claude-workspace/` has the changes. Use that path as REPO.
+From conversation context, determine which single repo under `$HOME/git-workspace/claude-workspace/` has the changes. Use that path as REPO.
 
 Run in one command to get the diff context:
 ```bash
@@ -73,7 +73,7 @@ When a `Closes` clause is present, issues must **not** be closed via `gh issue c
 Pass the JSON as a single-quoted string to `--meta`:
 
 ```bash
-python3 /home/ClaudeSpace/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/scripts/pr.py \
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/scripts/pr.py \
   --repo REPO \
   --meta 'JSON_HERE'
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Create a GitHub issue — stable interface path for the /todo skill.
-Usage: create_issue.py --repo OWNER/REPO --title "..." --body "..." --label Code
+Usage: create_issue.py --repo OWNER/REPO --title "..." --body "..." --label Code [--auto-project]
 """
 import argparse
 import sys
@@ -14,6 +14,9 @@ parser.add_argument("--repo",  required=True)
 parser.add_argument("--title", required=True)
 parser.add_argument("--body",  default="")
 parser.add_argument("--label", action="append", default=[], dest="labels")
+parser.add_argument("--project", action="store_true", default=False,
+                    help="Auto-detect the active GitHub Project and link this issue to it")
 args = parser.parse_args()
 
-create(repo=args.repo, title=args.title, body=args.body, labels=args.labels)
+create(repo=args.repo, title=args.title, body=args.body, labels=args.labels,
+       project=args.project)
