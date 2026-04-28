@@ -56,6 +56,16 @@ After moving to Verify, run advance-ready to surface any newly unblocked items:
 python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/advance_ready.py
 ```
 
+### Step 7c — Workspace cleanup
+
+Before starting the next iteration, free anything the previous task left running so the next task can come up clean. Currently this means: stop the MCP dev server if it is up.
+
+```bash
+make -C $HOME/git-workspace/claude-workspace/rs-mcp-server stop
+```
+
+`make stop` is a no-op if nothing is on port 8000, so it is safe to run unconditionally. Add similar one-line cleanups here as new long-lived dev processes appear (e.g., a future Discord bot dev runner).
+
 Report any promotions, then **immediately return to Step 1**.
 
 ---
