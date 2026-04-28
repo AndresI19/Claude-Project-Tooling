@@ -29,12 +29,13 @@ def create(repo, title, body, labels, project=False):
     if project:
         owner = repo.split("/")[0]
         active = find_active_project(owner)
-        if active:
-            project_id = get_project_node_id(owner, active["number"])
-            add_item_to_project(project_id, node_id)
-            print(f"Linked to project: {active['title']}")
-        else:
-            print("Warning: no active project found — issue not linked to a project")
+        if not active:
+            print(f"ERROR: --project requested but no active project found for owner '{owner}'")
+            sys.exit(1)
+        project_id = get_project_node_id(owner, active["number"])
+        item_id = add_item_to_project(project_id, node_id)
+        print(f"Linked to project: {active['title']}")
+        print(f"ITEM_ID: {item_id}")
 
     print(url)
     return url

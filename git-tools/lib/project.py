@@ -13,6 +13,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import github_client
 
 
+# ── Status name constants ─────────────────────────────────────────────────────
+# These mirror the column names in the GitHub Project board. Keeping them
+# centralized means a project rename only requires one edit.
+
+STATUS_BACKLOG     = "Backlog"
+STATUS_TODO        = "Todo"
+STATUS_READY       = "Ready"
+STATUS_IN_PROGRESS = "In Progress"
+STATUS_VERIFY      = "Verify"
+STATUS_DONE        = "Done"
+
+
 # ── Query helpers ──────────────────────────────────────────────────────────────
 
 def query_project(owner, project_number):
@@ -303,7 +315,7 @@ def advance_ready(project_data, repo):
     """
     candidates = [
         item for item in items_by_status(project_data, None)
-        if item["status"] in ("Todo", "Backlog")
+        if item["status"] in (STATUS_TODO, STATUS_BACKLOG)
         and item["state"] == "OPEN"
         and "Epic" not in item["labels"]
     ]
@@ -324,6 +336,6 @@ def advance_ready(project_data, repo):
             ]
             if not all(s == "closed" for s in states):
                 continue
-        set_item_status_by_name(project_data, item["item_id"], "Ready")
+        set_item_status_by_name(project_data, item["item_id"], STATUS_READY)
         promoted.append((item["number"], item["title"]))
     return promoted

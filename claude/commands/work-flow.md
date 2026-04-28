@@ -20,7 +20,7 @@ Repeat steps 1–7 until the queue is empty. **Do not stop between iterations** 
 
 Run the full `/new-task` flow for each iteration. This handles, in order:
 - Building the unified Verify/In Progress/Ready list (with link emojis and color-coded status chips)
-- Selecting an item (default: first Ready)
+- Selecting an item
 - Inferring the target repo
 - Resume detection (existing branch with `-I<N>` suffix)
 - Pre-flight uncommitted-changes prompt (4 options)

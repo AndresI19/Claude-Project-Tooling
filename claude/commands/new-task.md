@@ -10,24 +10,38 @@ python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/in
 
 Parse the JSON. Each item has: `item_id`, `number`, `title`, `labels`, `url`, `status`.
 
-Render one numbered list. Each entry includes a link emoji to the GitHub issue. Color-code the trailing status chip:
-- `Verify` → **yellow** (`\033[33m`)
-- `In Progress` → **cyan** (`\033[36m`)
-- `Ready` → default
+**Render the menu as markdown in your text response — not via Bash printf.** Bash outputs over a few lines get auto-folded and the user has to expand them; markdown in your text response is always visible and supports hyperlinks.
 
-Format example:
+Status is conveyed by an **emoji indicator** at the start of each row (no color column, no padding):
+- `Verify` → 🟡
+- `In Progress` → 🔵
+- `Ready` → ⚪
+
+The issue number is the link, rendered as a markdown hyperlink at the end of the line.
+
+**Pagination**: show **20 items per page**. If more items remain, the line just above `0. Cancel` is `21. → List more (N remaining)` (numbering continues across pages, e.g. items 21–40 on page 2 keep numbers 21–40).
+
+**Number formatting**: do NOT use a markdown ordered list (`1.`, `2.`, …) — its renderer doesn't pad single-digit numbers to align with double-digit ones, so emoji shift right at item 10+. Instead, render each row as a paragraph line with the number wrapped in backticks and **left-padded with one space when the total max number is two digits** (so ` 1.` aligns with `10.`). This puts all status emoji on the same column.
+
+Format example (markdown in your text response):
 ```
-Pick a task:
+**Pick a task** (page 1 of 3):
 
-  1) [🔗](https://github.com/AndresI19/RS-Agent-Planning/issues/27) Issue #27 — Add sanity tests for health and crash    [Verify]
-  2) [🔗](https://github.com/AndresI19/RS-Agent-Planning/issues/13) Issue #13 — Implement get_player_stats tool         [In Progress]
-  3) [🔗](https://github.com/AndresI19/RS-Agent-Planning/issues/14) Issue #14 — Implement get_quest_info tool           [Ready]
-  0) Cancel
+` 1.` 🟡 Add sanity tests for health and crash · [#27](https://github.com/AndresI19/RS-Agent-Planning/issues/27)
+` 2.` 🔵 Implement search_wiki tool · [#11](https://github.com/AndresI19/RS-Agent-Planning/issues/11)
+` 3.` ⚪ Implement get_player_stats tool · [#13](https://github.com/AndresI19/RS-Agent-Planning/issues/13)
+` 4.` ⚪ Implement get_quest_info tool · [#14](https://github.com/AndresI19/RS-Agent-Planning/issues/14)
+` 5.` ⚪ Add in-memory cache with per-tool TTLs · [#15](https://github.com/AndresI19/RS-Agent-Planning/issues/15)
+` 6.` ⚪ Test all tools via mcp dev inspector · [#16](https://github.com/AndresI19/RS-Agent-Planning/issues/16)
+`21.` → List more (N remaining)
+` 0.` Cancel
+
+Legend: 🟡 Verify · 🔵 In Progress · ⚪ Ready
 ```
 
-If the terminal does not render markdown links, the URL appears as plain text after the 🔗 — keep the emoji either way.
+Pad widths to whatever max is needed: 2 digits when the menu has 10–99 items, 3 digits for 100+. Single-digit-only menus need no padding.
 
-**Default selection**: first **Ready** item if any exist; otherwise first **In Progress** item.
+Keep the `user-select.wav` sound on selection prompts (play via Bash before rendering the menu).
 
 Ask: **"Which? (number, or 0 to cancel)"** — wait for the user.
 
