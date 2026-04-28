@@ -12,4 +12,4 @@ if len(sys.argv) < 2:
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from project_items import list_items
 
-list_items(status=sys.argv[1], json_output=True)
+list_items(statuses=[sys.argv[1]], json_output=True)

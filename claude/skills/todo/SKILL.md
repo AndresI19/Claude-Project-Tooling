@@ -60,11 +60,48 @@ From the input text, derive:
 Run:
 
 ```bash
-python3 Claude-Project-Tooling/git-tools/interface/create_issue.py \
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/create_issue.py \
   --repo AndresI19/TARGETREPO \
   --title "TITLE" \
   --body "DESCRIPTION" \
-  --label LABEL1 --label LABEL2
+  --label LABEL1 --label LABEL2 \
+  [--project]
 ```
 
-Omit `--label` flags if no labels apply. Print the issue URL when done.
+- Include `--project` when TARGETREPO is **RS-Agent-Planning** — this detects the active GitHub Project and links the issue to it automatically.
+- Omit `--project` for **Claude-Project-Tooling** (no active project board).
+- Omit `--label` flags if no labels apply.
+
+When `--project` is used, the script prints `ITEM_ID: <id>` followed by the issue URL. **Capture both.**
+
+## Step 5 — Set initial project status (RS-Agent-Planning only)
+
+Skip this step entirely for Claude-Project-Tooling.
+
+For RS-Agent-Planning, decide between **Todo** (queued, blocked by other work) and **Ready** (can be picked up immediately) by inferring sequential dependencies from existing project items.
+
+Fetch all current open project items:
+
+```bash
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/ready_items.py \
+  --include-statuses="In Progress,Ready,Todo,Backlog"
+```
+
+Read the new issue's intent against the open items' titles. Apply this rule:
+
+- The new task **logically depends on** another open item (it can only be done after that item completes — e.g., "deploy the server" depends on "provision hosting") → set status to **Todo**
+- Otherwise → set status to **Ready**
+
+Then run:
+
+```bash
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/set_status.py ITEM_ID "Todo"
+# or
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/set_status.py ITEM_ID "Ready"
+```
+
+Do this silently — do not prompt the user. The chosen status appears in the final URL print.
+
+## Step 6 — Print the result
+
+Print the issue URL and the chosen initial status (if applicable).

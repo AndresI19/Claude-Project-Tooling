@@ -52,15 +52,19 @@ def print_table(items, status_label):
     print(f"  {BOLD}0){RESET}  Cancel\n")
 
 
-def list_items(status="Ready", json_output=False,
+def list_items(statuses=("Ready",), json_output=False,
                owner=_OWNER, project_number=_PROJECT_NUMBER):
-    """List project items for a given status. Prints table or JSON."""
+    """List project items across one or more statuses, sorted by the order of `statuses`."""
     project_data = query_project(owner, project_number)
-    items = items_by_status(project_data, status)
+    all_items = items_by_status(project_data, status_filter=None)
+    wanted = set(statuses)
+    items = [i for i in all_items if i["status"] in wanted]
+    priority = {s: idx for idx, s in enumerate(statuses)}
+    items.sort(key=lambda x: (priority.get(x["status"], 999), x.get("number") or 0))
     if json_output:
         print(json.dumps(items, indent=2))
     else:
-        print_table(items, status)
+        print_table(items, ", ".join(statuses))
 
 
 def update_status(item_id, target,
@@ -75,7 +79,8 @@ def main():
     parser = argparse.ArgumentParser(description="Query and update GitHub Project items")
     parser.add_argument("--owner",          default=_OWNER)
     parser.add_argument("--project-number", type=int, default=_PROJECT_NUMBER)
-    parser.add_argument("--status",         default="Ready")
+    parser.add_argument("--statuses",       default="Ready",
+                        help="Comma-separated statuses in display priority order")
     parser.add_argument("--json",           action="store_true")
     parser.add_argument("--set-status",     nargs=2, metavar=("ITEM_ID", "STATUS"))
     args = parser.parse_args()
@@ -84,7 +89,8 @@ def main():
         update_status(args.set_status[0], args.set_status[1],
                       owner=args.owner, project_number=args.project_number)
     else:
-        list_items(status=args.status, json_output=args.json,
+        statuses = [s.strip() for s in args.statuses.split(",")]
+        list_items(statuses=statuses, json_output=args.json,
                    owner=args.owner, project_number=args.project_number)
 
 
