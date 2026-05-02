@@ -4,6 +4,14 @@ Pick the next task to work on, create its branch, and (for code tasks) enter pla
 
 ## Step 1 — Build the unified task list
 
+**Always re-run this command at the start of every invocation. Never reuse JSON from a previous run, even within the same session.** Project board state can change between iterations from sources outside the current loop:
+- The user may have closed an issue manually or moved its column
+- A merged PR may have auto-closed the issue it `Closes`'d
+- A previous `/work-flow` iteration may have moved an item to Verify or Done
+- A `/todo` invocation may have added new Ready items
+
+When invoked from `/work-flow`'s loop, treat each iteration as a brand-new state read — do not render the menu from in-context memory of a prior iteration's `ready_items.py` output.
+
 ```bash
 python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/ready_items.py --include-statuses="Verify,In Progress,Ready"
 ```
