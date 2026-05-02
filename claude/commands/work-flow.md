@@ -16,10 +16,12 @@ Report any items just promoted. Then enter the loop.
 
 Repeat steps 1–7 until the queue is empty. **Do not stop between iterations** — after moving an issue to Verify, immediately return to step 1 without waiting for user instruction.
 
+**Each iteration MUST re-fetch fresh project state via `ready_items.py`.** Never render the next iteration's menu from the previous iteration's data — the user may have closed an issue, moved a card, or merged a PR (auto-closing its issue) between iterations. Stale menus that show items in the wrong column (e.g., still showing a closed issue as Verify) are the most common loop bug. Treat in-context memory of a prior iteration's queue as untrusted.
+
 ### Steps 1–6 — Delegate to /new-task
 
 Run the full `/new-task` flow for each iteration. This handles, in order:
-- Building the unified Verify/In Progress/Ready list (with link emojis and color-coded status chips)
+- Building the unified Verify/In Progress/Ready list (with link emojis and color-coded status chips) — **always from a fresh `ready_items.py` read, never from cached data**
 - Selecting an item
 - Inferring the target repo
 - Resume detection (existing branch with `-I<N>` suffix)
