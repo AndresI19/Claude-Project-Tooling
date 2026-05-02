@@ -1,6 +1,6 @@
 ---
 name: todo
-description: Create a GitHub issue from free-form text. Prompts the user to choose a repo (Claude-Project-Tooling or RS-Agent-Planning), then generates a short title, description, and appropriate labels before opening the issue.
+description: Create a GitHub issue from free-form text. Discovers issue-enabled repos in the workspace, suggests the top three by relevance, then generates a short title, description, and appropriate labels before opening the issue.
 ---
 
 Create a GitHub issue from the text passed as the skill argument.
@@ -9,32 +9,48 @@ Create a GitHub issue from the text passed as the skill argument.
 
 The skill argument is the raw text the user typed after /todo. Use it to understand the intent.
 
-## Step 2 — Suggest a repo
+## Step 2 — Pick the target repo
 
-Infer which repo the issue belongs to based on the text:
-- If it relates to tooling, skills, setup, Claude config, or workspace infrastructure → suggest **Claude-Project-Tooling**
-- If it relates to planning, agents, architecture, or project work → suggest **RS-Agent-Planning**
-- If unclear → suggest **Claude-Project-Tooling** as default
+The repo set is discovered, not hardcoded. As new repos join the workspace they appear here automatically — no skill edit needed.
 
-Run the matching bash command to display a colored menu. The suggested repo is highlighted in bold green.
+### Discover candidates
 
-If **Claude-Project-Tooling** is suggested:
 ```bash
-printf '\nWhich repo should this issue go to?\n\n'
-printf '  1) \033[1;32mClaude-Project-Tooling\033[0m  \033[32m← suggested\033[0m\n'
-printf '  2) RS-Agent-Planning\n\n'
+gh repo list AndresI19 --json name,nameWithOwner,description,hasIssuesEnabled --limit 100
 ```
 
-If **RS-Agent-Planning** is suggested:
-```bash
-printf '\nWhich repo should this issue go to?\n\n'
-printf '  1) Claude-Project-Tooling\n'
-printf '  2) \033[1;32mRS-Agent-Planning\033[0m  \033[32m← suggested\033[0m\n\n'
-```
+Filter the result to repos that:
+1. Have `hasIssuesEnabled: true`, AND
+2. Have a matching directory under `$HOME/git-workspace/claude-workspace/` (so archived or unrelated repos in the account don't get suggested):
+   ```bash
+   ls $HOME/git-workspace/claude-workspace
+   ```
 
-After running the printf command, output **only** a short prompt — do not re-echo the menu in text. The Bash output is already visible. Example follow-up: `Which? (1 or 2)`
+### Rank top 3
 
-Wait for the user to respond with 1 or 2. Use their choice as TARGETREPO.
+Score each candidate against the issue text. Combine these signals:
+- **Lexical match**: issue keywords against the repo's name and description
+- **Domain hints** (extend as new repos appear):
+  - tooling, skills, scripts, claude config, workspace infrastructure, hooks, cron, /pr, /todo, /new-task, /work-flow, /review → favor `Claude-Project-Tooling`
+  - planning, agents, architecture, MCP server, tools (search_wiki / get_item_price / get_player_stats / get_quest_info), wiki, hiscores, GE → favor `RS-Agent-Planning`
+
+The single top-ranked candidate is the **Recommended** choice. Take the next two highest-ranked candidates as the alternates. If fewer than 3 candidates exist, present whatever you have (minimum 2 required by `AskUserQuestion`).
+
+### Present the choice
+
+Call the `AskUserQuestion` tool with one question:
+- `question`: "Which repo should this issue go to?"
+- `header`: "Repo"
+- `multiSelect`: false
+- `options`: up to 3 entries. Each entry's `label` is the repo `nameWithOwner` (suffix " (Recommended)" on the highest-ranked one, per the tool's convention). Each entry's `description` is a one-sentence rationale for why this repo fits.
+
+The tool automatically appends an **Other** escape — selecting it lets the user type any `owner/repo` value (or cancel via escape).
+
+### Resolve `TARGETREPO`
+
+- Selected one of the presented options → use its `nameWithOwner` as `TARGETREPO`.
+- Selected Other and typed a value → validate it matches `<owner>/<repo>` shape AND that `gh repo view <owner/repo>` succeeds. If validation fails, show the error and re-prompt.
+- Cancelled → exit the skill silently.
 
 ## Step 3 — Generate title, description, and labels
 
@@ -52,8 +68,10 @@ From the input text, derive:
 | `Discovery` | Investigation or research needed before work can start |
 | `Inquiry` | Open design question that must be resolved first |
 | `DevOps` | Infrastructure, deployment, CI/CD, or automation work |
-| `Service: MCP` | Changes specific to the MCP server |
+| `Service: <name>` | Changes specific to a named service (e.g. `Service: MCP`). Project-specific — only present on repos that defined them. |
 | `Epic` | Do not use — reserved for git-plan |
+
+The universal labels above (`Code`, `Defect`, `Discovery`, `Inquiry`, `DevOps`, `Epic`) are installed on every repo by `init_labels.py`. Service-specific tags are project-local and may not exist on the target repo — if uncertain, omit them and let the issue be re-tagged later.
 
 ## Step 4 — Create the issue
 
@@ -61,24 +79,34 @@ Run:
 
 ```bash
 python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/create_issue.py \
-  --repo AndresI19/TARGETREPO \
+  --repo TARGETREPO \
   --title "TITLE" \
   --body "DESCRIPTION" \
   --label LABEL1 --label LABEL2 \
   [--project]
 ```
 
-- Include `--project` when TARGETREPO is **RS-Agent-Planning** — this detects the active GitHub Project and links the issue to it automatically.
-- Omit `--project` for **Claude-Project-Tooling** (no active project board).
-- Omit `--label` flags if no labels apply.
+`TARGETREPO` is the full `owner/repo` from Step 2.
+
+### `--project` flag
+
+Include `--project` when `TARGETREPO` has an active GitHub Project board. Project-bearing repos in the workspace today:
+
+| Repo | Project |
+|------|---------|
+| `AndresI19/RS-Agent-Planning` | Build RuneScape MCP Server |
+
+When new project-bearing repos appear, add them to this table.
+
+For repos without a project board (e.g. `AndresI19/Claude-Project-Tooling` today), omit `--project`.
 
 When `--project` is used, the script prints `ITEM_ID: <id>` followed by the issue URL. **Capture both.**
 
-## Step 5 — Set initial project status (RS-Agent-Planning only)
+## Step 5 — Set initial project status (project-bearing repos only)
 
-Skip this step entirely for Claude-Project-Tooling.
+Skip this step entirely for repos without a project board.
 
-For RS-Agent-Planning, decide between **Todo** (queued, blocked by other work) and **Ready** (can be picked up immediately) by inferring sequential dependencies from existing project items.
+For project-bearing repos, decide between **Todo** (queued, blocked by other work) and **Ready** (can be picked up immediately) by inferring sequential dependencies from existing project items.
 
 Fetch all current open project items:
 
