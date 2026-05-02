@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 STANDARD_LABELS = [
+    # PR review-effort vocabulary (used by /review and /ultrareview)
     {"name": "Trivial",       "color": "2ecc71", "description": "Can be evaluated quickly"},
     {"name": "Non-Trivial",   "color": "f1c40f", "description": "Needs a scan through, but is largely harmless"},
     {"name": "Complex",       "color": "e74c3c", "description": "Requires focused review, a step above Non-Trivial"},
@@ -24,6 +25,13 @@ STANDARD_LABELS = [
     {"name": "Enhancement",   "color": "a2eeef", "description": "New feature or request"},
     {"name": "Duplicate",     "color": "cfd3d7", "description": "This issue or pull request already exists"},
     {"name": "As Designed",   "color": "ffffff", "description": "Intended behavior, not a bug"},
+    # Issue-routing vocabulary (used by /todo and /git-plan)
+    {"name": "Code",          "color": "1d76db", "description": "Writing new feature code"},
+    {"name": "Defect",        "color": "d73a4a", "description": "Fixing broken or incorrect behavior"},
+    {"name": "Discovery",     "color": "5319e7", "description": "Investigation or research needed before work can start"},
+    {"name": "Inquiry",       "color": "fbca04", "description": "Open design question that must be resolved first"},
+    {"name": "DevOps",        "color": "006b75", "description": "Infrastructure, deployment, CI/CD, or automation work"},
+    {"name": "Epic",          "color": "9e0142", "description": "Top-level work group (managed by /git-plan)"},
 ]
 
 STANDARD_NAMES = {l["name"].lower() for l in STANDARD_LABELS}
