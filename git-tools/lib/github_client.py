@@ -8,14 +8,35 @@ Token resolution order:
   2. System keyring (GNOME Keyring / SecretService)
   3. gh CLI managed token (local dev fallback)
 """
+import fcntl
 import json
 import os
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import keyring
 import requests
+
+_LOCK_PATH = "/tmp/.gh-api.lock"
+
+
+@contextmanager
+def _api_lock():
+    """Serialize concurrent GitHub API calls across processes via flock.
+
+    Multiple scripts (or parallel tool invocations) hitting api.github.com at the
+    same moment race on DNS resolution and can pile up against rate limits. A
+    single flock-protected critical section turns those concurrent calls into a
+    queue, making each call deterministic without needing retry logic.
+    """
+    with open(_LOCK_PATH, "w") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "resources" / ".config"
 
@@ -103,12 +124,13 @@ def _check_graphql_errors(errors):
 
 def graphql(query, variables=None):
     """Execute a GraphQL query or mutation. Returns the full response dict."""
-    resp = requests.post(
-        GRAPHQL_URL,
-        headers={**_headers(), "Content-Type": "application/json"},
-        json={"query": query, "variables": variables or {}},
-        timeout=30,
-    )
+    with _api_lock():
+        resp = requests.post(
+            GRAPHQL_URL,
+            headers={**_headers(), "Content-Type": "application/json"},
+            json={"query": query, "variables": variables or {}},
+            timeout=30,
+        )
     _check_http(resp)
     data = resp.json()
     if "errors" in data:
@@ -118,19 +140,21 @@ def graphql(query, variables=None):
 
 def rest(method, path, **kwargs):
     """Make a GitHub REST API call. Returns parsed JSON (or {} for 204 No Content)."""
-    resp = requests.request(
-        method,
-        f"{REST_BASE}{path}",
-        headers=_headers(),
-        timeout=30,
-        **kwargs,
-    )
+    with _api_lock():
+        resp = requests.request(
+            method,
+            f"{REST_BASE}{path}",
+            headers=_headers(),
+            timeout=30,
+            **kwargs,
+        )
     _check_http(resp)
     return {} if resp.status_code == 204 else resp.json()
 
 
 def token_scopes():
     """Return the X-OAuth-Scopes header value, or '' for fine-grained PATs."""
-    resp = requests.get(f"{REST_BASE}/user", headers=_headers(), timeout=10)
+    with _api_lock():
+        resp = requests.get(f"{REST_BASE}/user", headers=_headers(), timeout=10)
     _check_http(resp)
     return resp.headers.get("X-OAuth-Scopes", "")
