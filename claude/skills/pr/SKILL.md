@@ -28,7 +28,19 @@ Run in one command to get the diff context:
 git -C REPO fetch origin && git -C REPO diff origin/main --stat && git -C REPO status --short && git -C REPO log origin/main..HEAD --oneline
 ```
 
-## Step 2 — Generate PR metadata
+## Step 2 — Run pre-PR checks
+
+Before generating PR metadata, validate that the repo's lint and test checks pass — catches regressions locally before they reach CI.
+
+**Discovery**: if `<REPO>/CLAUDE.md` exists and contains a `## Pre-PR checks` heading, extract the FIRST fenced ```bash``` block under that heading. Each non-blank, non-comment line of that block is one shell command.
+
+**Execution**: from REPO as the working directory, run the commands in order via the Bash tool — chain with `&&` so the first non-zero exit halts the rest.
+
+**On failure**: stop and report the failing command plus its output. Do **not** proceed to Step 3. The user fixes the issue, then re-invokes `/pr`.
+
+**No checks defined**: if `<REPO>/CLAUDE.md` is missing, or the section is absent, skip silently and proceed. Repos opt in by adding the section — useful for trivial repos where lint/test setup isn't worth the overhead.
+
+## Step 3 — Generate PR metadata
 
 Based on the diff output, produce a JSON object with exactly these fields:
 - `branch_name`: kebab-case, max 3 words, describes what changed
@@ -41,20 +53,22 @@ Based on the diff output, produce a JSON object with exactly these fields:
 
 If this PR has an associated GitHub issue, the issue reference must be the very first line of `pr_body`, followed by a `---` divider and a blank line before the prose:
 
-- Use `Closes #N` when the merge fully resolves the issue with no further verification or follow-up required — GitHub auto-closes it on merge.
-- Use `#N` (bare reference) when the PR relates to an issue but does not fully close it.
+- Use `Closes ORG/REPO#N` when the merge fully resolves the issue with no further verification or follow-up required — GitHub auto-closes it on merge.
+- Use `ORG/REPO#N` (bare reference) when the PR relates to an issue but does not fully close it.
+
+`ORG` is the GitHub organization or account name (personal accounts are treated the same as orgs). Always use the full `ORG/REPO#N` form — never a bare `#N`, which silently resolves only within the PR's own repo and will target the wrong issue or nothing when the issue lives elsewhere.
 
 ```
-Closes #42
+Closes ORG/REPO#42
 
 ---
 
 The rest of the body here...
 ```
 
-Multiple issues stack on separate lines before the divider — mix `Closes #N` and bare `#N` as appropriate.
+Multiple issues stack on separate lines before the divider — mix `Closes ORG/REPO#N` and bare `ORG/REPO#N` as appropriate.
 
-Do **not** use `Closes #N` unless the merge fully resolves the issue with no further verification or follow-up remaining.
+Do **not** use `Closes ORG/REPO#N` unless the merge fully resolves the issue with no further verification or follow-up remaining.
 
 When a `Closes` clause is present, issues must **not** be closed via `gh issue close` — the merge handles it. Only use `gh issue close` directly for issues with no associated PR.
 
@@ -68,7 +82,7 @@ When a `Closes` clause is present, issues must **not** be closed via `gh issue c
 - `Fix` — bug fix or correction
 - `Enhancement` — new feature or capability
 
-## Step 3 — Run the script
+## Step 4 — Run the script
 
 Pass the JSON as a single-quoted string to `--meta`:
 
@@ -80,7 +94,7 @@ python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/sc
 
 The script handles everything from here: sync state check, stash-only-if-needed, branch creation, commit, push, and PR creation.
 
-## Step 4 — Interpret output
+## Step 5 — Interpret output
 
 On success the script prints the PR URL and a numbered list of open PRs with the new one in blue.
 
