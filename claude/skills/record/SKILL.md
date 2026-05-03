@@ -31,6 +31,25 @@ Do **not** proceed with the session log until the user confirms how to handle it
 
 ---
 
+## Pre-flight — Check for Planning/ changes
+
+Run:
+```bash
+git -C ~/git-workspace/claude-workspace/RS-Agent-Planning status --short -- Planning/
+```
+
+If there are **any uncommitted or unstaged changes** under `Planning/` (typically /work-flow Inquiry/Discovery deliverables), prompt the user:
+
+> The Planning/ directory in RS-Agent-Planning has uncommitted edits. Include them in this push? (y/N)
+
+If **yes** → set `INCLUDE_PLANNING=1` and pass `--include-planning` to `push_sessions.py` in the FINALIZE step. The Planning/ edits will commit alongside the session log under the same commit message.
+
+If **no** → proceed without the flag; Planning/ edits remain dirty in the working tree for a future push.
+
+If the directory is clean, skip silently.
+
+---
+
 ## Step 1 — Determine action
 
 ```bash
@@ -106,7 +125,9 @@ Replace the session table rows and totals in
 and update the "Last updated" date. The script outputs one `| row |` per session file followed by a `TOTALS` line.
 
 ```bash
-python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/scripts/push_sessions.py --message "MESSAGE"
+python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/scripts/push_sessions.py --message "MESSAGE" [--include-planning]
 ```
 
-Use a short descriptive commit message (e.g. "Update Claude Sessions and token usage"). The script only stages and pushes files under `Claude Sessions/` in RS-Agent-Planning. Claude-Project-Tooling is never touched — script changes there must go through `/pr`.
+Use a short descriptive commit message (e.g. "Update Claude Sessions and token usage", or "Record session + add game-disambiguation decision (#45)" when bundling a Planning edit).
+
+The script stages and pushes files under `Claude Sessions/` in RS-Agent-Planning. With `--include-planning` (set when the Planning pre-flight got a yes) it also stages files under `Planning/`. Claude-Project-Tooling is never touched — script changes there must go through `/pr`.

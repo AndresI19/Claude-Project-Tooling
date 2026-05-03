@@ -2,14 +2,18 @@
 """
 push_sessions.py — Commit and push RS-Agent-Planning session logs to origin/main.
 
-Only stages files under 'Claude Sessions/' — script and tooling changes in
-Claude-Project-Tooling must go through a PR via the /pr skill instead.
+Stages files under 'Claude Sessions/' by default. With --include-planning, also
+stages files under 'Planning/' so /work-flow Inquiry/Discovery doc edits ride
+along with the next /record push (the documented behavior of /work-flow). Script
+and tooling changes in Claude-Project-Tooling must still go through a PR via the
+/pr skill instead.
 
 If the current branch is not main, the script switches to main first (carrying
-uncommitted session log edits with it), commits, pushes, then switches back.
+uncommitted edits with it), commits, pushes, then switches back.
 
 Usage:
     python3 push_sessions.py --message "Update Claude Sessions and token usage"
+    python3 push_sessions.py --message "Record session + planning decision" --include-planning
 """
 
 import argparse
@@ -21,17 +25,30 @@ from git.exc import GitCommandError
 
 SESSION_REPO_PATH = Path.home() / "git-workspace/claude-workspace/RS-Agent-Planning"
 SESSION_DIR       = "Claude Sessions"
+PLANNING_DIR      = "Planning"
+
+
+def _stage_dir(repo, subdir):
+    """Stage every file under <repo>/<subdir>/ in the index. No-op if missing."""
+    path = SESSION_REPO_PATH / subdir
+    if not path.exists():
+        return
+    files = [
+        str(f.relative_to(SESSION_REPO_PATH))
+        for f in path.rglob("*") if f.is_file()
+    ]
+    if files:
+        repo.index.add(files)
 
 
 def stage_session_files(repo):
     """Stage all files under Claude Sessions/ in the index."""
-    session_path = SESSION_REPO_PATH / SESSION_DIR
-    files = [
-        str(f.relative_to(SESSION_REPO_PATH))
-        for f in session_path.rglob("*") if f.is_file()
-    ]
-    if files:
-        repo.index.add(files)
+    _stage_dir(repo, SESSION_DIR)
+
+
+def stage_planning_files(repo):
+    """Stage all files under Planning/ in the index."""
+    _stage_dir(repo, PLANNING_DIR)
 
 
 def has_staged(repo):
@@ -45,6 +62,11 @@ def has_staged(repo):
 def main():
     parser = argparse.ArgumentParser(description="Push session logs to origin/main")
     parser.add_argument("--message", required=True, help="Commit message")
+    parser.add_argument(
+        "--include-planning",
+        action="store_true",
+        help="Also stage Planning/ edits in addition to Claude Sessions/.",
+    )
     args = parser.parse_args()
 
     repo = Repo(SESSION_REPO_PATH)
@@ -75,8 +97,10 @@ def main():
             sys.exit(1)
         switched = True
 
-    # ── Stage only session log files ──────────────────────────────────────────
+    # ── Stage selected paths ──────────────────────────────────────────────────
     stage_session_files(repo)
+    if args.include_planning:
+        stage_planning_files(repo)
 
     if not has_staged(repo):
         print(f"  {name}: nothing to commit — skipped")
