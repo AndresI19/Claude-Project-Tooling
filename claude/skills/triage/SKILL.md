@@ -91,20 +91,24 @@ Number the rows 1..N, including no-change rows, so the user can reference any ro
 
 ## Step 5 — Authorization gate (with edits)
 
-Read the user's answer. Single-character `y`, `n`, or one or more `e` directives separated by commas or newlines:
+Play `user-select.wav` before the prompt, then call `AskUserQuestion` with one question:
 
-- **`y`** → proceed to Step 6 with the proposal as-is.
-- **`n`** → cancel. Print "Triage cancelled — no changes applied." and exit.
-- **`e <directives>`** → parse each directive:
-  - `skip <row>` — remove row's proposed change from the batch (turns into "no change")
-  - `<row> → <Status>` — override the proposed status for that row (e.g. `3 → Todo` keeps issue #46 as Todo instead of demoting to Backlog)
-  - `add <row> → <Status>` — promote a previously-no-change row into the batch with the given target status
+- `question`: "Apply <N> proposed status change(s)?"
+- `header`: "Triage"
+- `multiSelect`: false
+- `options`:
+  - **Approve all** — proceed to Step 6 with the proposal as-is.
+  - **Propose change** — open a free-text follow-up prompt where the user lists edits.
+  - **Cancel** — abort. Print "Triage cancelled — no changes applied." and exit.
 
-  After applying edits, re-render the table from Step 4 with overrides and re-prompt. Loop until `y` or `n`.
+If the user picks **Propose change**, ask "What changes? (one per line)". Parse each line as a directive:
+- `skip <row>` — remove row's proposed change from the batch (turns into "no change")
+- `<row> → <Status>` — override the proposed status for that row (e.g. `3 → Todo` keeps issue #46 as Todo instead of demoting to Backlog)
+- `add <row> → <Status>` — promote a previously-no-change row into the batch with the given target status
+
+After applying edits, re-render the table from Step 4 with overrides and re-prompt with `AskUserQuestion` again. Loop until **Approve all** or **Cancel**.
 
 Status names in directives match the canonical names: Backlog, Todo, Ready, In Progress, Verify, Done.
-
-Play `user-select.wav` before each prompt so the user knows it's their turn.
 
 ## Step 6 — Apply the batch
 
