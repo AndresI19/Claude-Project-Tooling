@@ -4,14 +4,13 @@ Generate a top-down GitHub project plan, then create it in GitHub upon approval.
 
 ## Pre-flight — Check for an active project
 
-**Before doing anything else**, run both commands:
+**Before doing anything else**, run:
 
 ```bash
-python3 Claude-Project-Tooling/git-tools/interface/advance_ready.py
 python3 Claude-Project-Tooling/git-tools/interface/loop_state.py
 ```
 
-`advance_ready.py` surfaces any newly unblocked items. `loop_state.py` returns JSON with `next_action`:
+`loop_state.py` returns JSON with `next_action`:
 
 - `"continue"` — Ready or In Progress items exist. Stop and report; the project is still active.
 - `"blocked"` — Todo/Backlog items remain but all blockers are still open. Stop; issues must be resolved first.
