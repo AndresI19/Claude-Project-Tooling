@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 from projects import list_all_projects, find_oldest_active
 from github_client import load_config
-from status_emojis import STATUS_EMOJI
+from status_emojis import STATUS_EMOJI, legend as status_legend
 
 # ANSI helpers (kept inline — display.py covers richer rendering but this
 # script is intentionally lightweight so /git-plan and /triage can both use it).
@@ -55,6 +55,8 @@ def render_menu(projects, oldest_number, include_create_new=True):
         lines.append("")
         lines.append(f"   0. {BOLD}+ Create new project{RESET}")
     lines.append("")
+    lines.append(f"Legend: {status_legend()}")
+    lines.append("")
     lines.append("Pick? (number, or 0 to cancel)")
     return "\n".join(lines)
 
@@ -64,12 +66,16 @@ def main():
     parser.add_argument("--json", action="store_true", help="emit JSON instead of a formatted menu")
     parser.add_argument("--no-create-new", action="store_true",
                         help="omit the '0. Create new project' row (used by /triage)")
+    parser.add_argument("--include-closed", action="store_true",
+                        help="include closed/archived projects in the output (hidden by default)")
     args = parser.parse_args()
 
     cfg = load_config()
     owner = cfg["owner"]
 
     projects = list_all_projects(owner)
+    if not args.include_closed:
+        projects = [p for p in projects if not p["closed"]]
     # Default sort: oldest first (matches the "oldest is /work-flow default" surface).
     projects.sort(key=lambda p: p["createdAt"])
 
