@@ -144,6 +144,58 @@ def set_item_status_by_name(project_data, item_id, target_status):
     set_item_status(project_data["id"], item_id, status_field["id"], option["id"])
 
 
+def set_item_statuses(project_data, moves):
+    """Apply a batch of status mutations in a single aliased GraphQL request.
+
+    moves: iterable of (item_id, target_status_name) tuples.
+    Returns the number of mutations applied.
+
+    Resolves the Status field and option IDs once, then sends one GraphQL
+    request containing N aliased updateProjectV2ItemFieldValue mutations.
+    """
+    moves = list(moves)
+    if not moves:
+        return 0
+
+    status_field = next(
+        (n for n in project_data["fields"]["nodes"] if n.get("name") == "Status"), None
+    )
+    if not status_field:
+        print("ERROR: Status field not found.")
+        sys.exit(1)
+
+    option_id_by_name = {o["name"]: o["id"] for o in status_field["options"]}
+    for _, status_name in moves:
+        if status_name not in option_id_by_name:
+            valid = ", ".join(option_id_by_name)
+            print(f"ERROR: unknown status '{status_name}'. Valid: {valid}")
+            sys.exit(1)
+
+    var_decls = ["$projectId: ID!", "$fieldId: ID!"]
+    var_decls += [f"$itemId{i}: ID!" for i in range(len(moves))]
+    var_decls += [f"$optionId{i}: String!" for i in range(len(moves))]
+
+    bodies = []
+    for i in range(len(moves)):
+        bodies.append(
+            f"  m{i}: updateProjectV2ItemFieldValue(input: {{\n"
+            f"    projectId: $projectId\n"
+            f"    itemId: $itemId{i}\n"
+            f"    fieldId: $fieldId\n"
+            f"    value: {{ singleSelectOptionId: $optionId{i} }}\n"
+            f"  }}) {{ projectV2Item {{ id }} }}"
+        )
+    mutation = f"mutation({', '.join(var_decls)}) {{\n{chr(10).join(bodies)}\n}}"
+
+    variables = {"projectId": project_data["id"], "fieldId": status_field["id"]}
+    for i, (item_id, status_name) in enumerate(moves):
+        variables[f"itemId{i}"] = item_id
+        variables[f"optionId{i}"] = option_id_by_name[status_name]
+
+    github_client.graphql(mutation, variables)
+    return len(moves)
+
+
 # ── Project creation helpers ───────────────────────────────────────────────────
 
 def _get_owner_node_id(owner):

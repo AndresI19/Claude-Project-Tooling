@@ -1,24 +1,80 @@
 # /git-plan
 
-Generate a top-down GitHub project plan, then create it in GitHub upon approval.
+Operate on a GitHub project: pick an existing one to triage or extend, or create a new one from scratch.
 
-## Pre-flight — Check for an active project
+## Pre-flight — Project selector
 
-**Before doing anything else**, run:
+**Before doing anything else**, render the selector menu:
 
 ```bash
-python3 Claude-Project-Tooling/git-tools/interface/loop_state.py
+python3 Claude-Project-Tooling/git-tools/interface/list_projects.py
 ```
 
-`loop_state.py` returns JSON with `next_action`:
+The script prints a numbered list of every existing project (oldest first, with the oldest active project highlighted as `/work-flow default`) plus a `0. + Create new project` row.
 
-- `"continue"` — Ready or In Progress items exist. Stop and report; the project is still active.
-- `"blocked"` — Todo/Backlog items remain but all blockers are still open. Stop; issues must be resolved first.
-- `"plan"` — all queues empty. Proceed to Phase 1.
+Play `user-select.wav` and prompt: "Pick? (number, or 0 to cancel)".
+
+- **User picks 1..N** → the chosen project becomes `PROJECT`. Proceed to **Branch A: operate on existing project**.
+- **User picks 0** → proceed to **Branch B: create new project**.
+- **User cancels** → exit cleanly.
 
 ---
 
-## Hierarchy
+## Branch A — Operate on existing project
+
+Show the chosen project's status counts (already returned by `list_projects.py --json`), then sub-prompt:
+
+> "What do you want to do with `<Project title>`?
+>   1. Triage — review proposed status moves
+>   2. Extend — add new Epics or Issues
+>   3. Both — triage first, then extend
+>   0. Cancel"
+
+Play `user-select.wav` before the prompt.
+
+### Branch A.1 — Triage
+
+Invoke the `/triage` skill against the selected project. Skip its Step 1 (project already chosen) and start at Step 2 — pull all open items, reason about each, render the proposal table, get authorization, apply.
+
+### Branch A.2 — Extend
+
+Run a **modified Phase 1/2** that adds new Epics/Issues to the existing project without touching anything that already exists.
+
+#### Phase 1 (extend) — Plan additions only
+
+Call `EnterPlanMode` immediately. Then:
+
+1. **Gather context.** Read `RS-Agent-Planning/Planning/project-overview.md`, `architecture.md`, and `tasks.md`. List the existing project's open items (from the JSON output of `list_projects.py`) so the new plan complements rather than duplicates them.
+
+2. **Draft additions only.** Propose new Epics and/or new Issues that fit into the existing project. Do NOT re-list items that already exist.
+
+3. **Write the plan** to the plan file in the same format as Branch B (see "Plan File Format" below), but only the new content.
+
+4. **Iterate.** Adjust based on feedback.
+
+5. Call `ExitPlanMode` to present the plan for final approval.
+
+#### Phase 2 (extend) — Execute
+
+Serialize the approved additions into the same JSON schema as Branch B, with `project_title` set to **the existing project's exact title**:
+
+```bash
+python3 Claude-Project-Tooling/git-tools/scripts/git-plan.py --meta '<JSON>'
+```
+
+`git-plan.py` is idempotent for existing items — it creates new Epics/Issues, links child issue numbers into Epic checklists, and **only sets status on newly created issues**. Existing items are never overwritten on re-runs. That property is what makes "extend" safe.
+
+### Branch A.3 — Both
+
+Run Branch A.1 (triage) first. After moves are applied, ask if the user wants to extend; if yes, run Branch A.2.
+
+---
+
+## Branch B — Create new project
+
+This is the original `/git-plan` create-from-scratch flow. The Phase 1/2 logic below is unchanged.
+
+### Hierarchy
 
 | Level | GitHub object | Scope |
 |-------|--------------|-------|
@@ -28,7 +84,7 @@ python3 Claude-Project-Tooling/git-tools/interface/loop_state.py
 
 **All planning issues, epics, and projects are created in `AndresI19/RS-Agent-Planning`.**
 
-## Phase 1 — Plan (read-only)
+### Phase 1 — Plan (read-only)
 
 Call `EnterPlanMode` immediately before doing anything else.
 
@@ -76,7 +132,7 @@ Then:
 - Multiple blockers are comma-separated
 - Use `none` when there are no blockers
 
-## Phase 2 — Execute (after ExitPlanMode approval)
+### Phase 2 — Execute (after ExitPlanMode approval)
 
 Serialize the approved plan into the JSON schema below and run:
 
@@ -125,6 +181,8 @@ The script:
 3. Links child issue numbers back into each Epic's checklist body
 4. Adds everything to the project board with the correct initial status
 5. **Only sets status on newly created issues** — existing items are never overwritten on re-runs
+
+---
 
 ## Label Guidelines
 

@@ -1,11 +1,11 @@
 """Tests for project domain logic: items_by_status, set_item_status_by_name,
-loop_state (next_action branching), and wrap_labels layout."""
+set_item_statuses, loop_state (next_action branching), and wrap_labels layout."""
 import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 from conftest import make_item, make_project_data
-from project import items_by_status, set_item_status_by_name
+from project import items_by_status, set_item_status_by_name, set_item_statuses
 from project_state import loop_state
 from list_prs import wrap_labels
 
@@ -110,6 +110,60 @@ class TestSetItemStatusByName:
         set_item_status_by_name(data, "PVTI_1", "Todo")
         _, _, _, option_id = mock_set.call_args[0]
         assert option_id == "opt_todo"
+
+
+# ── set_item_statuses (batch) ──────────────────────────────────────────────────
+
+class TestSetItemStatuses:
+    @patch("project.github_client.graphql")
+    def test_empty_moves_short_circuits(self, mock_graphql):
+        data = make_project_data([])
+        applied = set_item_statuses(data, [])
+        assert applied == 0
+        mock_graphql.assert_not_called()
+
+    @patch("project.github_client.graphql")
+    def test_single_move_uses_one_aliased_mutation(self, mock_graphql):
+        data = make_project_data([])
+        applied = set_item_statuses(data, [("PVTI_1", "Ready")])
+        assert applied == 1
+        # One GraphQL call, with m0 alias and the correct option id resolved.
+        assert mock_graphql.call_count == 1
+        mutation_str, variables = mock_graphql.call_args[0]
+        assert "m0:" in mutation_str
+        assert variables["itemId0"]   == "PVTI_1"
+        assert variables["optionId0"] == "opt_ready"
+        assert variables["projectId"] == "PVT_test"
+        assert variables["fieldId"]   == "field_status"
+
+    @patch("project.github_client.graphql")
+    def test_multiple_moves_batched_in_one_request(self, mock_graphql):
+        data = make_project_data([])
+        moves = [("PVTI_1", "Ready"), ("PVTI_2", "Todo"), ("PVTI_3", "Backlog")]
+        applied = set_item_statuses(data, moves)
+        assert applied == 3
+        # Still one GraphQL call — that's the whole point of the batch.
+        assert mock_graphql.call_count == 1
+        mutation_str, variables = mock_graphql.call_args[0]
+        for i in range(3):
+            assert f"m{i}:" in mutation_str
+        assert variables["itemId0"]   == "PVTI_1" and variables["optionId0"] == "opt_ready"
+        assert variables["itemId1"]   == "PVTI_2" and variables["optionId1"] == "opt_todo"
+        assert variables["itemId2"]   == "PVTI_3" and variables["optionId2"] == "opt_backlog"
+
+    @patch("project.github_client.graphql")
+    def test_unknown_status_exits_before_call(self, mock_graphql):
+        data = make_project_data([])
+        with pytest.raises(SystemExit):
+            set_item_statuses(data, [("PVTI_1", "NotARealStatus")])
+        mock_graphql.assert_not_called()
+
+    @patch("project.github_client.graphql")
+    def test_missing_status_field_exits(self, mock_graphql):
+        data = {"id": "PVT_test", "fields": {"nodes": []}, "items": {"nodes": []}}
+        with pytest.raises(SystemExit):
+            set_item_statuses(data, [("PVTI_1", "Ready")])
+        mock_graphql.assert_not_called()
 
 
 # ── loop_state / next_action ───────────────────────────────────────────────────
