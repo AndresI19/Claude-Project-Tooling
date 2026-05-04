@@ -20,10 +20,18 @@ Parse the JSON. Each item has: `item_id`, `number`, `title`, `labels`, `url`, `s
 
 **Render the menu as markdown in your text response — not via Bash printf.** Bash outputs over a few lines get auto-folded and the user has to expand them; markdown in your text response is always visible and supports hyperlinks.
 
-Status is conveyed by an **emoji indicator** at the start of each row (no color column, no padding):
-- `Verify` → 🟡
-- `In Progress` → 🔵
-- `Ready` → ⚪
+Status is conveyed by an **emoji indicator** at the start of each row (no color column, no padding). The canonical map lives in `git-tools/lib/status_emojis.py` — keep it in sync with anything you render here:
+
+| Status | Emoji |
+|--------|-------|
+| Backlog | ⚫ |
+| Todo | 🟠 |
+| Ready | ⚪ |
+| In Progress | 🔵 |
+| Verify | 🟡 |
+| Done | 🟢 |
+
+`/new-task`'s menu only filters to `Verify`, `In Progress`, and `Ready`, so the rendered rows will only ever use 🟡, 🔵, and ⚪. The full lifecycle is documented above for reference.
 
 The issue number is the link, rendered as a markdown hyperlink at the end of the line.
 
