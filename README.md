@@ -105,11 +105,6 @@ Plan and execute a new GitHub project.
 
 ```
 ── Pre-flight ──────────────────────────────────────────────────────
-interface/advance_ready.py
-  └─ scripts/project_advance.py :: run()
-       └─ lib/project.py :: advance_ready()
-            └─ lib/github_client.py  ← GraphQL (project field mutations)
-
 interface/loop_state.py
   └─ scripts/project_state.py :: loop_state()
        └─ lib/project.py :: items_by_status()
@@ -148,9 +143,6 @@ scripts/project_items.py --set-status ITEM_ID "In Progress"
 Drive the full project loop autonomously.
 
 ```
-── Pre-flight ──────────────────────────────────────────────────────
-interface/advance_ready.py  (same as /git-plan pre-flight above)
-
 ── Per-issue loop ──────────────────────────────────────────────────
 interface/ready_items.py
   └─ scripts/project_items.py :: list_items(status="Ready")
@@ -161,8 +153,6 @@ interface/set_status.py ITEM_ID "In Progress"
   └─ scripts/project_items.py :: update_status()
 
 Claude  ← does the work based on issue labels
-
-interface/advance_ready.py  ← promotes any newly unblocked items
 
 ── Transition ──────────────────────────────────────────────────────
 interface/status_items.py STATUS   ← called for: In Progress · Todo · Backlog

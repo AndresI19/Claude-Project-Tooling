@@ -2,16 +2,6 @@
 
 Drive the project loop: work through Verify, In Progress, and Ready issues, then plan the next project.
 
-## Pre-flight — Advance Ready items
-
-```bash
-python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/advance_ready.py
-```
-
-Report any items just promoted. Then enter the loop.
-
----
-
 ## Loop — Work through the queue
 
 Repeat steps 1–7 until the queue is empty. **Do not stop between iterations** — after moving an issue to Verify, immediately return to step 1 without waiting for user instruction.
@@ -52,12 +42,6 @@ python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/in
 
 The user closes the issue manually after reviewing the work / merging the PR. Verify items appear at the top of the next iteration's task list (yellow chip), so they remain visible as a reminder until acted on.
 
-After moving to Verify, run advance-ready to surface any newly unblocked items:
-
-```bash
-python3 $HOME/git-workspace/claude-workspace/Claude-Project-Tooling/git-tools/interface/advance_ready.py
-```
-
 ### Step 7c — Workspace cleanup
 
 Before starting the next iteration, free anything the previous task left running so the next task can come up clean. Currently this means: stop the MCP dev server if it is up.
@@ -68,13 +52,13 @@ make -C $HOME/git-workspace/claude-workspace/rs-mcp-server stop
 
 `make stop` is a no-op if nothing is on port 8000, so it is safe to run unconditionally. Add similar one-line cleanups here as new long-lived dev processes appear (e.g., a future Discord bot dev runner).
 
-Report any promotions, then **immediately return to Step 1**.
+Then **immediately return to Step 1**.
 
 ---
 
 ## Transition — Queue is empty
 
-When the unified queue (Verify + In Progress + Ready) is empty and advance-ready promotes nothing:
+When the unified queue (Verify + In Progress + Ready) is empty:
 
 ### Check remaining items
 

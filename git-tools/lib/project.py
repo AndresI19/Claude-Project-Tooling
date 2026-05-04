@@ -3,10 +3,9 @@
 project.py — GitHub Projects V2 domain logic.
 
 Covers: querying project state, status mutations, project creation,
-active-project detection, and advance-ready promotion.
+and active-project detection.
 """
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -305,37 +304,3 @@ query($login: String!, $first: Int!) {
         if has_open:
             return project
     return None
-
-
-def advance_ready(project_data, repo):
-    """Promote Todo/Backlog items to Ready when all their listed blockers are closed.
-
-    Reads '## Blocked By' sections from issue bodies. Skips Epics.
-    Returns list of (number, title) tuples for promoted items.
-    """
-    candidates = [
-        item for item in items_by_status(project_data, None)
-        if item["status"] in (STATUS_TODO, STATUS_BACKLOG)
-        and item["state"] == "OPEN"
-        and "Epic" not in item["labels"]
-    ]
-    promoted = []
-    for item in candidates:
-        issue = github_client.rest("GET", f"/repos/{repo}/issues/{item['number']}")
-        body  = issue.get("body") or ""
-        if "## Blocked By" in body:
-            section      = body.split("## Blocked By", 1)[1]
-            section      = re.split(r"\n##", section)[0]
-            blocker_nums = [int(m) for m in re.findall(r"#(\d+)", section)]
-        else:
-            blocker_nums = []
-        if blocker_nums:
-            states = [
-                github_client.rest("GET", f"/repos/{repo}/issues/{n}").get("state", "").lower()
-                for n in blocker_nums
-            ]
-            if not all(s == "closed" for s in states):
-                continue
-        set_item_status_by_name(project_data, item["item_id"], STATUS_READY)
-        promoted.append((item["number"], item["title"]))
-    return promoted
