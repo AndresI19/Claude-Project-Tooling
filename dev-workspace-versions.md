@@ -19,6 +19,7 @@
 | **npm** | 11.12.1 |
 | **Java** | OpenJDK 25.0.2 (Homebrew) |
 | **Docker** | 29.4.0 |
+| **docker-buildx** | 0.33.0 (Homebrew; symlinked into `~/.docker/cli-plugins/`) |
 | **kubectl** | v1.35.4 (Kustomize v5.7.1) |
 | **Colima** | 0.10.1 |
 | **Glow** | 2.1.2 |
