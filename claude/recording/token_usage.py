@@ -14,8 +14,13 @@ import json
 import os
 from datetime import datetime
 
+# Claude Code stores each session's JSONL under a per-cwd "project" directory whose name is
+# the working-directory path slugified (every "/" becomes "-"). The launch directory has
+# moved into the workspace over time, so match any project dir for this workspace (and its
+# sub-repos) by substring rather than hardcoding one slug — keeps the tracker working when
+# the cwd changes again.
 JSONL_GLOBS = [
-    os.path.expanduser("~/.claude/projects/-home-ClaudeSpace/*.jsonl"),
+    os.path.expanduser("~/.claude/projects/*claude-workspace*/*.jsonl"),
     os.path.expanduser("~/.claude/sessions/*.jsonl"),
 ]
 
