@@ -75,9 +75,9 @@ def main():
 
     # ── Active-project guard ──────────────────────────────────────────────────
     if not args.project_number:
-        active = find_active_project(owner)
+        active = find_active_project(owner, repo)
         if active:
-            print(f"ERROR: An active project already has open issues.")
+            print(f"ERROR: An active project for {repo} already has open issues.")
             print(f"  #{active['number']}: {active['title']}")
             print(f"  {active['url']}")
             print()

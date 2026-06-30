@@ -330,8 +330,14 @@ mutation($projectId: ID!, $contentId: ID!) {
 
 # ── Active-project detection + advance-ready ──────────────────────────────────
 
-def find_active_project(owner):
-    """Return the first project with open issues, or None if all are clear."""
+def find_active_project(owner, repo=None):
+    """Return the first project with open issues, or None if all are clear.
+
+    When `repo` ("OWNER/REPO") is given, the guard is scoped per-repo: a project
+    counts as active only if it has open issues that live in that repo. This lets
+    each repo carry its own active project independently (e.g. a code repo and a
+    separate planning repo do not block each other).
+    """
     query = """
 query($login: String!, $first: Int!) {
   user(login: $login) {
@@ -340,7 +346,7 @@ query($login: String!, $first: Int!) {
         number title url
         items(first: 100) {
           nodes {
-            content { ... on Issue { state } }
+            content { ... on Issue { state repository { nameWithOwner } } }
           }
         }
       }
@@ -351,6 +357,10 @@ query($login: String!, $first: Int!) {
     for project in data["data"]["user"]["projectsV2"]["nodes"]:
         has_open = any(
             (item.get("content") or {}).get("state", "").upper() == "OPEN"
+            and (
+                repo is None
+                or ((item.get("content") or {}).get("repository") or {}).get("nameWithOwner") == repo
+            )
             for item in project["items"]["nodes"]
         )
         if has_open:
