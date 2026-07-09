@@ -3,8 +3,8 @@
 # ⚙ Dev Workspace — Installed Versions
 
 > **Machine:** fedora · Fedora Linux 43 Workstation
-> **Date:** 2026-04-19
-> **Package Manager:** Homebrew 5.1.7
+> **Date:** 2026-06-29
+> **Package Manager:** Homebrew 5.1.9
 
 ---
 
@@ -18,6 +18,7 @@
 | **Node** | 25.9.0 |
 | **npm** | 11.12.1 |
 | **Java** | OpenJDK 25.0.2 (Homebrew) |
+| **Go** | 1.26.4 (Homebrew) |
 | **Docker** | 29.4.0 |
 | **docker-buildx** | 0.33.0 (Homebrew; symlinked into `~/.docker/cli-plugins/`) |
 | **kubectl** | v1.35.4 (Kustomize v5.7.1) |
