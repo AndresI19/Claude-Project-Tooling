@@ -116,6 +116,21 @@ def delete_branch_safely(repo, branch, base):
     run_silent(["git", "branch", "-D", branch], cwd=repo)
 
 
+def open_pr_for(repo, branch):
+    """Number of the open PR whose head is `branch`, or None.
+
+    Treated as "no open PR" when gh is unavailable or unauthenticated: this guard exists to stop a
+    destructive action, and a lookup that could not run is not evidence that the branch is free.
+    Failing open here is deliberate — the caller's other guards still hold.
+    """
+    out, ok = run_silent(
+        ["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number",
+         "-q", ".[0].number"],
+        cwd=repo,
+    )
+    return out.strip() if ok and out.strip() else None
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -187,16 +202,31 @@ def main():
     # -----------------------------------------------------------------------------------------
     if ahead and not already_on_base:
         head = current_branch
+
+        # A branch with an open PR is somebody's in-flight review, not scratch space. Appending to
+        # it would push unrelated commits into that PR and change what a reviewer already approved.
+        # Being *ahead of base* is not evidence the branch is ours — it is equally consistent with
+        # having been left checked out from earlier, unrelated work.
+        existing = open_pr_for(repo, head)
+        if existing:
+            print(f"\nERROR: branch '{head}' is already the head of open PR #{existing}.")
+            print("  Opening a PR from it now would fold this work into that review.")
+            print(f"  If it belongs there, push to it deliberately. Otherwise start from the base:")
+            print(f"    git checkout {base} && git checkout -b {branch_name}")
+            sys.exit(1)
+
+        print(f"Branch '{head}' already carries {ahead} commit(s) — opening the PR from it.")
         if head != branch_name:
             # The caller's suggested name is only used when this script creates the branch. It did
             # not; renaming an existing branch under the caller would be a surprise of its own.
-            print(f"Branch '{head}' already carries {ahead} commit(s) — opening the PR from it.")
             print(f"  (ignoring the suggested name '{branch_name}': the branch already exists)")
-        else:
-            print(f"Branch '{head}' already carries {ahead} commit(s) — opening the PR from it.")
 
         if working_tree_dirty(repo):
-            print("Committing the remaining working-tree changes on top...")
+            # Name the files. The tree is being amended onto a branch this script did not create,
+            # so "what exactly is going into the PR" must be visible, never inferred.
+            print("Committing the remaining working-tree changes on top:")
+            for line in run(["git", "status", "--porcelain"], cwd=repo).splitlines():
+                print(f"    {line}")
             run(["git", "add", "-A"], cwd=repo)
             run(["git", "commit", "-m", commit_message, "-m", CO_AUTHOR], cwd=repo)
 
