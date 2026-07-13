@@ -21,8 +21,8 @@ is a code reset (a separate action that writes a new hash), or re-signing-up —
 ## Run it
 
 ```bash
-python3 "$HOME/git-workspace/claude-workspace/platform-orchestration/k8s/logins.py"
-python3 "$HOME/git-workspace/claude-workspace/platform-orchestration/k8s/logins.py" --json
+python3 "$HOME/git-workspace/claude-workspace/platform-ops/logins.py"
+python3 "$HOME/git-workspace/claude-workspace/platform-ops/logins.py" --json
 ```
 
 ## Output

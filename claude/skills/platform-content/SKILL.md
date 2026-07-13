@@ -16,7 +16,7 @@ Do NOT use this for code or manifests — those go through a normal build/deploy
 ## Run it
 
 ```bash
-bash "$HOME/git-workspace/claude-workspace/platform-orchestration/k8s/pv-content.sh" <command>
+bash "$HOME/git-workspace/claude-workspace/platform-ops/pv-content.sh" <command>
 ```
 
 Commands:
