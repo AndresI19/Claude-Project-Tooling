@@ -37,13 +37,36 @@ bash .../pv-content.sh set-cards ~/git-workspace/claude-workspace/data-driven-qu
 
 ## How it works (so nothing surprises you)
 
-It brings up a throwaway `pv-writer` pod that mounts the same PVC read-write (the volume is mounted
-read-only into the real pods, so it cannot be written through them), copies the file in, tears the
-pod down, then **rolls the consuming deployment** — required because a replaced single file gets a new
-inode and the old subPath bind-mount would keep serving the old one. The script repoints the
-kubeconfig first (Colima/minikube forwarded-port quirk), so no manual setup is needed.
+It brings up a throwaway `pv-writer` pod that mounts the same PVC read-write, copies the file in, and
+tears the pod down. The script repoints the kubeconfig first (Colima/minikube forwarded-port quirk), so
+no manual setup is needed.
+
+**`set-cards` rolls the quiz; `set-resume` rolls nothing.** The quiz builds its decks once at startup,
+so a new deck on the volume changes nothing until that pod restarts — and note a malformed deck fails
+the quiz's *next* boot, not the copy. The résumé needs no roll: home reads it per request from the
+volume's directory mount, so the next request already serves the new file.
+
+(The résumé used to need a roll, and the reason is worth keeping: it arrived as a subPath single-file
+mount, which is a bind mount pinned to the file's inode at container start. A replaced file has a new
+inode and the mount kept serving the old one. home now reads the directory mount, which resolves by
+name on every lookup.)
+
+## There is an HTTP path too
+
+home serves an admin-only `PUT /api/content/<path>` for the same volume — no kubectl, no pod:
+
+```bash
+curl -X PUT https://andres.project-platform.me/api/content/resume.pdf \
+     -H "Authorization: Bearer <admin token>" \
+     -H 'Content-Type: application/pdf' --data-binary @resume.pdf
+```
+
+Prefer it for routine swaps. It accepts only `resume.pdf` and `cards/<name>.yaml` (an allowlist —
+`platform-version.json` and anything else are refused), and writes atomically. This script remains the
+escape hatch: it works when home is broken, unbuilt or mid-rollout, and it is the only way to reach
+paths the allowlist refuses.
 
 ## Output
 
-Prints the copied file's listing and the rollout status, ending in `done`. Errors are `ERROR: ...`
-lines — a missing file, a wrong extension (résumé must be `.pdf`), or a cluster that is down.
+Prints the copied file's listing and, for `set-cards`, the rollout status — ending in `done`. Errors are
+`ERROR: ...` lines — a missing file, a wrong extension (résumé must be `.pdf`), or a cluster that is down.
