@@ -24,6 +24,9 @@
 //   --full               capture the full scrollable page (ignored with --selector)
 //   --reduced-motion     emulate prefers-reduced-motion: reduce — freezes CSS animations, which is
 //                        what makes a pixel baseline of an animated view possible at all
+//   --color-scheme <s>   emulate prefers-color-scheme: light | dark. Without it a capture shows
+//                        whatever THIS machine happens to prefer, so a design with two themes only
+//                        ever gets one of them verified — and it is never the reviewer's choice which.
 //   --browser <path>     browser binary (else auto-detected)
 //   --timeout <ms>       hard cap on the whole run                           (default 90000)
 //
@@ -165,10 +168,20 @@ async function main() {
      is "done". These apps already answer this exact question for real users, via
      `@media (prefers-reduced-motion: reduce) { animation: none }`, so the honest move is to be a user
      who asked for that. It freezes what the app itself agrees is decoration and touches nothing else. */
-  if (opt['reduced-motion']) {
-    await send('Emulation.setEmulatedMedia', {
-      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
-    });
+  /* Both media emulations go in ONE call: setEmulatedMedia REPLACES the feature list rather than
+     merging into it, so issuing them separately would silently drop whichever went first. */
+  {
+    const features = [];
+    if (opt['reduced-motion']) features.push({ name: 'prefers-reduced-motion', value: 'reduce' });
+    if (opt['color-scheme']) {
+      const v = String(opt['color-scheme']).toLowerCase();
+      if (v !== 'light' && v !== 'dark') {
+        console.error(`ERROR: --color-scheme must be light or dark, got ${JSON.stringify(v)}`);
+        process.exit(1);
+      }
+      features.push({ name: 'prefers-color-scheme', value: v });
+    }
+    if (features.length) await send('Emulation.setEmulatedMedia', { features });
   }
   if (identityJson) {
     // A quoted, escaped literal so any characters in the JSON survive the round-trip.
